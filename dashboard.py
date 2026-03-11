@@ -5,8 +5,18 @@ Bloomberg Terminal Estetiği
 """
 
 from flask import Flask, render_template_string, jsonify, request
-import sqlite3, threading, time
+import sqlite3, threading, time, math
 from datetime import datetime
+
+def _sanitize(obj):
+    """NaN/Infinity değerlerini None'a çevir — JSON spec uyumu için."""
+    if isinstance(obj, float):
+        return None if (math.isnan(obj) or math.isinf(obj)) else obj
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize(v) for v in obj]
+    return obj
 from bot_engine import zamansal_analiz, BIST_HISSELER, bist100_durumu, backtest
 from alarm_bot import (db_alarm_init, db_alarm_ekle, db_alarm_sil,
                         db_alarm_listele, alarm_dongu, telegram_test,
@@ -25,34 +35,59 @@ _cache = {"data": [], "guncelleme": None, "yukleniyor": False}
 # ─── VERİTABANI ───────────────────────────────────────────────────
 def db_init():
     with sqlite3.connect(DB) as c:
+        c.execute("PRAGMA journal_mode=WAL")   # Concurrent read+write güvenliği
         c.executescript("""
         CREATE TABLE IF NOT EXISTS portfoy (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             sembol TEXT NOT NULL, adet REAL NOT NULL,
-            alis_fiyat REAL NOT NULL, alis_tarihi TEXT NOT NULL, notlar TEXT);
+            alis_fiyat REAL NOT NULL, alis_tarihi TEXT NOT NULL,
+            stop_loss REAL, hedef_1 REAL, notlar TEXT);
         CREATE TABLE IF NOT EXISTS islem_gecmisi (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             islem_tipi TEXT, sembol TEXT, adet REAL,
             fiyat REAL, tarih TEXT, kar_zarar REAL);
         """)
+        # Mevcut DB'ye yeni kolonları ekle (varsa hata vermez)
+        for col, typ in [("stop_loss", "REAL"), ("hedef_1", "REAL")]:
+            try:
+                c.execute(f"ALTER TABLE portfoy ADD COLUMN {col} {typ}")
+            except Exception:
+                pass  # Kolon zaten var
+
+def _db_connect():
+    """DB bağlantısı aç + tabloları guarantee et."""
+    c = sqlite3.connect(DB)
+    c.execute("PRAGMA journal_mode=WAL")
+    c.execute("""CREATE TABLE IF NOT EXISTS portfoy (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sembol TEXT NOT NULL, adet REAL NOT NULL,
+        alis_fiyat REAL NOT NULL, alis_tarihi TEXT NOT NULL,
+        stop_loss REAL, hedef_1 REAL, notlar TEXT)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS islem_gecmisi (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        islem_tipi TEXT, sembol TEXT, adet REAL,
+        fiyat REAL, tarih TEXT, kar_zarar REAL)""")
+    for col, typ in [("stop_loss","REAL"),("hedef_1","REAL")]:
+        try: c.execute(f"ALTER TABLE portfoy ADD COLUMN {col} {typ}")
+        except Exception: pass
+    c.row_factory = sqlite3.Row
+    return c
 
 def db_portfoy_al():
-    with sqlite3.connect(DB) as c:
-        c.row_factory = sqlite3.Row
+    with _db_connect() as c:
         return [dict(r) for r in
                 c.execute("SELECT * FROM portfoy ORDER BY alis_tarihi DESC").fetchall()]
 
-def db_portfoy_ekle(sembol, adet, fiyat, notlar=""):
+def db_portfoy_ekle(sembol, adet, fiyat, notlar="", stop_loss=None, hedef_1=None):
     now = datetime.now().strftime("%d.%m.%Y %H:%M")
-    with sqlite3.connect(DB) as c:
-        c.execute("INSERT INTO portfoy (sembol,adet,alis_fiyat,alis_tarihi,notlar) VALUES (?,?,?,?,?)",
-                  (sembol.upper(), adet, fiyat, now, notlar))
+    with _db_connect() as c:
+        c.execute("INSERT INTO portfoy (sembol,adet,alis_fiyat,alis_tarihi,stop_loss,hedef_1,notlar) VALUES (?,?,?,?,?,?,?)",
+                  (sembol.upper(), adet, fiyat, now, stop_loss, hedef_1, notlar))
         c.execute("INSERT INTO islem_gecmisi (islem_tipi,sembol,adet,fiyat,tarih,kar_zarar) VALUES (?,?,?,?,?,?)",
                   ("ALIS", sembol.upper(), adet, fiyat, now, 0))
 
 def db_portfoy_sat(poz_id, satis_fiyat):
-    with sqlite3.connect(DB) as c:
-        c.row_factory = sqlite3.Row
+    with _db_connect() as c:
         poz = c.execute("SELECT * FROM portfoy WHERE id=?", (poz_id,)).fetchone()
         if not poz: return False
         kz = round((satis_fiyat - poz["alis_fiyat"]) * poz["adet"], 2)
@@ -63,8 +98,7 @@ def db_portfoy_sat(poz_id, satis_fiyat):
     return kz
 
 def db_gecmis_al():
-    with sqlite3.connect(DB) as c:
-        c.row_factory = sqlite3.Row
+    with _db_connect() as c:
         return [dict(r) for r in
                 c.execute("SELECT * FROM islem_gecmisi ORDER BY id DESC LIMIT 200").fetchall()]
 
@@ -95,6 +129,15 @@ def arkaplan_dongu():
         TM = 30
     _son_ozet_gunu = None   # Bugün özet gönderildi mi?
     while True:
+        simdi = datetime.now()
+        # BIST Pzt-Cum 09:50-18:20 dışında tarama yapma (API kotası koru)
+        hafta_gunu = simdi.weekday()  # 0=Pazartesi, 6=Pazar
+        saat_dk = simdi.hour * 60 + simdi.minute
+        piyasa_acik = (hafta_gunu <= 4               # Pazartesi–Cuma
+                       and 590 <= saat_dk <= 1100)   # 09:50 – 18:20
+        if not piyasa_acik:
+            time.sleep(60 * 5)   # Piyasa kapalı → 5 dk bekle, döngüye dön
+            continue
         tara()
         # Sabah 09:05–09:35 arası ilk tamamlanan taramada günlük özet gönder
         simdi = datetime.now()
@@ -445,7 +488,16 @@ tbody tr.sig-guclu_sat{border-left:3px solid var(--red)}
 }
 .modal-close:hover{color:var(--text);border-color:var(--border2)}
 
-/* ── SCROLLBAR ── */
+/* ── BİLANÇO MODAL ── */
+.modal-body{padding:20px}
+.bil-section{margin-bottom:16px;background:var(--bg2);border-radius:10px;padding:12px}
+.bil-title{font-size:.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.bil-item{padding:5px 8px;margin:2px 0;font-size:.8rem;background:var(--bg3);border-radius:6px;border-left:2px solid var(--border)}
+.bil-stat-box{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;text-align:center}
+.bil-stat-label{font-size:.65rem;color:var(--muted);text-transform:uppercase;margin-bottom:4px}
+.bil-stat-val{font-size:1.1rem;font-weight:600;font-family:var(--fm)}
+
+
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--dim);border-radius:2px}
@@ -663,6 +715,14 @@ tbody tr.sig-guclu_sat{border-left:3px solid var(--red)}
     <div>
       <label>Alış Fiyatı (₺)</label>
       <input id="pf-fiyat" placeholder="142.30" type="number" step="0.01">
+    </div>
+    <div>
+      <label>Stop Loss (₺)</label>
+      <input id="pf-stop" placeholder="135.00" type="number" step="0.01">
+    </div>
+    <div>
+      <label>Hedef (₺)</label>
+      <input id="pf-hedef" placeholder="155.00" type="number" step="0.01">
     </div>
     <div>
       <label>Not (opsiyonel)</label>
@@ -883,6 +943,10 @@ function tabloRender(veri){
         ${d.endeks_baskisi?`<div style="font-size:.58rem;color:var(--red);margin-top:2px">▼ Endeks</div>`:''}
         ${d.ma_trend==='alti'?`<div style="font-size:.58rem;color:var(--muted);margin-top:1px">MA200↓</div>`:''}
         ${d.riskli_haber?`<div style="font-size:.55rem;color:var(--red);margin-top:2px;font-weight:600">⛔ RİSKLİ HABER</div>`:''}
+        ${d.tavan_uyari?`<div style="font-size:.58rem;color:var(--amber);margin-top:2px;font-weight:700">🚨 TAVAN</div>`:''}
+        ${d.zayif_bilanc?`<div style="font-size:.58rem;color:var(--red);margin-top:2px">⚠ ZAYIF BİLANÇO</div>`:''}
+        ${d.yatirimlik?`<div style="font-size:.58rem;background:linear-gradient(90deg,#7b61ff22,#a0f022);color:#bf6fff;border-radius:4px;padding:1px 4px;margin-top:2px;font-weight:700">💎 KELEPİR</div>`:''}
+        ${d.tepki_modu?`<div style="font-size:.55rem;color:var(--amber);margin-top:1px">⚡TEPKİ YÜKSELİŞİ</div>`:''}
         ${d.sikisma&&d.sikisma.sikisma&&d.sikisma.puan>=2?`<div style="font-size:.55rem;color:#f9c74f;margin-top:1px">⏳ ZAMANSALLIK</div>`:''}
         ${d.st_yon===1?`<div style="font-size:.55rem;color:var(--green);margin-top:1px">ST 🟢</div>`:d.st_yon===-1?`<div style="font-size:.55rem;color:var(--red);margin-top:1px">ST 🔴</div>`:''}
         ${d.seans_uyari?`<div style="font-size:.55rem;color:var(--amber);margin-top:1px">⚡Volatil Seans</div>`:''}
@@ -929,8 +993,10 @@ function tabloRender(veri){
         ${d.temel&&d.temel.pe?`<div style="font-size:.55rem;color:var(--muted)">F/K ${d.temel.pe}</div>`:''}
         `}
       </td>
-      <td><button class="btn sm" onclick="event.stopPropagation();portfoyEkleModal('${d.sembol}',${d.fiyat})"
-          title="Portföye ekle">+</button></td>
+      <td><button class="btn sm" onclick="event.stopPropagation();portfoyEkleModal('${d.sembol}',${d.fiyat},${d.stop_loss||0},${d.hedef_1||0})"
+          title="Portföye ekle">+</button>
+          <button class="btn sm" onclick="event.stopPropagation();bilancoGoster('${d.sembol.replace('.IS','')}')"\
+          title="Bilanço & Temel Analiz" style="background:rgba(76,201,240,.12);border-color:rgba(76,201,240,.3);color:var(--blue);margin-top:3px">📊</button></td>
     </tr>`;
   });
   document.getElementById('tablo-body').innerHTML = rows.join('');
@@ -970,6 +1036,13 @@ function top10Render(){
         <span class="v" style="color:var(--amber)">${d.risk_getiri}</span></div>
       ${d.haber_etiketi?`<div class="stk-row"><span class="k"></span>
         <span style="font-size:.62rem;color:var(--muted)">${d.haber_etiketi}</span></div>`:''}
+      ${d.tavan_uyari?`<div style="font-size:.62rem;color:var(--amber);background:rgba(249,199,79,.1);border-radius:5px;padding:3px 7px;margin:4px 0">🚨 TAVAN</div>`:''}
+      ${d.zayif_bilanc?`<div style="font-size:.62rem;color:var(--red);background:rgba(255,77,109,.08);border-radius:5px;padding:3px 7px;margin:4px 0">⚠ ZAYIF BİLANÇO</div>`:''}
+      ${d.yatirimlik?`<div style="font-size:.65rem;color:#bf6fff;background:rgba(160,0,255,.1);border-radius:5px;padding:3px 7px;margin:4px 0;font-weight:700">💎 YATIRIMLIK/KELEPİR</div>`:''}
+      <div style="margin-top:8px;display:flex;gap:6px">
+        <button class="btn sm" style="flex:1" onclick="event.stopPropagation();bilancoGoster('${sym}')" title="Bilanço">📊 Bilanço</button>
+        <button class="btn sm" onclick="event.stopPropagation();portfoyEkleModal('${d.sembol}',${d.fiyat},${d.stop_loss||0},${d.hedef_1||0})">+</button>
+      </div>
     </div>`;
   }
 
@@ -1000,7 +1073,7 @@ async function portfoyYukle(){
   const rows = pozlar.map(p=>{
     const guncel = (tumData.find(x=>x.sembol===p.sembol)?.fiyat)||p.alis_fiyat;
     const kz  = round2((guncel-p.alis_fiyat)*p.adet);
-    const yuz = round2((guncel-p.alis_fiyat)/p.alis_fiyat*100);
+    const yuz = p.alis_fiyat>0 ? round2((guncel-p.alis_fiyat)/p.alis_fiyat*100) : 0;
     topYat += p.alis_fiyat*p.adet;
     topDeg += guncel*p.adet;
     openKZ += kz;
@@ -1055,24 +1128,28 @@ async function portfoyYukle(){
   }
 }
 
-function portfoyEkleModal(sembol,fiyat){
+function portfoyEkleModal(sembol, fiyat, sl, h1){
   document.getElementById('pf-sembol').value = sembol.replace('.IS','');
   document.getElementById('pf-fiyat').value  = fiyat.toFixed(2);
   document.getElementById('pf-adet').value   = '';
+  if(document.getElementById('pf-stop')) document.getElementById('pf-stop').value = sl||'';
+  if(document.getElementById('pf-hedef')) document.getElementById('pf-hedef').value = h1||'';
   sekmeGec('portfoy',document.querySelectorAll('.nav-item')[2]);
   document.getElementById('pf-sembol').focus();
 }
 
 async function portfoyEkle(){
-  const sembol = document.getElementById('pf-sembol').value.trim().toUpperCase();
-  const adet   = parseFloat(document.getElementById('pf-adet').value);
-  const fiyat  = parseFloat(document.getElementById('pf-fiyat').value);
-  const notlar = document.getElementById('pf-notlar').value.trim();
+  const sembol    = document.getElementById('pf-sembol').value.trim().toUpperCase();
+  const adet      = parseFloat(document.getElementById('pf-adet').value);
+  const fiyat     = parseFloat(document.getElementById('pf-fiyat').value);
+  const notlar    = document.getElementById('pf-notlar').value.trim();
+  const stop_loss = parseFloat(document.getElementById('pf-stop')?.value)||null;
+  const hedef_1   = parseFloat(document.getElementById('pf-hedef')?.value)||null;
   if(!sembol||isNaN(adet)||adet<=0||isNaN(fiyat)||fiyat<=0){alert('Sembol, adet ve fiyat girilmeli!');return;}
   const r = await fetch('/api/portfoy/al',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({sembol,adet,fiyat,notlar})});
+    body:JSON.stringify({sembol,adet,fiyat,notlar,stop_loss,hedef_1})});
   const d = await r.json();
-  if(d.ok){['pf-sembol','pf-adet','pf-fiyat','pf-notlar'].forEach(id=>document.getElementById(id).value='');portfoyYukle();}
+  if(d.ok){['pf-sembol','pf-adet','pf-fiyat','pf-stop','pf-hedef','pf-notlar'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});portfoyYukle();}
   else alert('Hata: '+(d.hata||'?'));
 }
 
@@ -1411,6 +1488,36 @@ function haberDetay(sembol){
                 &nbsp;|&nbsp; RSI Tepe: ${d.divergence.rsi_tepe1} → ${d.divergence.rsi_tepe2} (düşüş)</div>`:''}
             </div>`:''}
         </div>
+        ${(()=>{
+          const tg = d.tarihsel_getiri||{};
+          const devir = [
+            {label:'1 Ay',   key:'1a'},
+            {label:'3 Ay',   key:'3a'},
+            {label:'6 Ay',   key:'6a'},
+            {label:'1 Yıl',  key:'1y'},
+            {label:'3 Yıl',  key:'3y'},
+          ];
+          const mevcut = devir.filter(x=>tg[x.key]!==null&&tg[x.key]!==undefined);
+          if(!mevcut.length) return '';
+          const cols = mevcut.map(x=>{
+            const v=tg[x.key];
+            const renk=v>0?'var(--green)':v<0?'var(--red)':'var(--muted)';
+            const ikon=v>0?'▲':v<0?'▼':'─';
+            return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;
+                      background:var(--bg3);border-radius:8px;padding:8px 10px;min-width:56px">
+              <div style="font-size:.6rem;color:var(--muted);font-weight:500">${x.label}</div>
+              <div style="font-family:var(--fm);font-weight:700;font-size:.9rem;color:${renk}">
+                ${v>0?'+':''}${v}%</div>
+              <div style="font-size:.65rem;color:${renk}">${ikon}</div>
+            </div>`;
+          }).join('');
+          return `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;
+                    padding:12px 16px;margin-bottom:14px">
+            <div style="font-size:.62rem;font-weight:600;letter-spacing:.8px;color:var(--muted);
+                  text-transform:uppercase;margin-bottom:10px">📈 Geçmiş Getiri</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">${cols}</div>
+          </div>`;
+        })()}
         ${nedenHTML}${ahHTML}${teHTML}
         <div style="font-size:.62rem;font-weight:600;letter-spacing:.8px;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Son Haberler</div>
         ${haberHTML}
@@ -1424,6 +1531,85 @@ async function yeniTara(){
   document.getElementById('scan-badge').style.display='block';
   await fetch('/api/tara');
   setTimeout(veriYukle,3000);
+}
+
+// ── BİLANÇO MODAL ──
+async function bilancoGoster(sembol){
+  let modal = document.getElementById('bilanco-modal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id='bilanco-modal';
+    modal.className='modal-overlay';
+    modal.onclick=e=>{if(e.target===modal)modal.remove()};
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML=`<div class="modal-box"><div class="modal-head"><span>📊 ${sembol} — Bilanço & Temel Analiz</span></div><div class="modal-body" style="text-align:center;padding:30px">⏳ Yükleniyor…</div></div>`;
+  modal.style.display='flex';
+
+  try{
+    const r = await fetch('/api/bilanco?sembol='+sembol);
+    const d = await r.json();
+    
+    if(d.hata){ modal.querySelector('.modal-body').innerHTML=`<p style="color:var(--red)">Hata: ${d.hata}</p>`; return; }
+    
+    const kdRenk = d.kar_durumu==='artiyor'?'var(--green)':d.kar_durumu==='zarar'?'var(--red)':'var(--amber)';
+    const skorRenk = d.temel_skor>=2?'var(--green)':d.temel_skor<0?'var(--red)':'var(--amber)';
+
+    const uyariHTML = (d.uyarilar||[]).map(u=>`<div class="bil-item">${u}</div>`).join('');
+    
+    const grafik = (liste, baslik) => {
+      if(!liste||!liste.length) return '';
+      const max = Math.max(...liste.map(x=>Math.abs(x.deger||0)))||1;
+      const bars = liste.map(x=>{
+        const pct = Math.round(Math.abs(x.deger||0)/max*100);
+        const renk = (x.deger||0)>=0?'var(--green)':'var(--red)';
+        return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0">
+          <span style="min-width:40px;font-size:.7rem;color:var(--muted)">${x.yil}</span>
+          <div style="flex:1;background:var(--bg3);border-radius:4px;height:18px;position:relative">
+            <div style="width:${pct}%;background:${renk};height:100%;border-radius:4px;opacity:.8"></div>
+          </div>
+          <span style="min-width:70px;text-align:right;font-size:.75rem;font-family:var(--fm);color:${renk}">${x.fmt}</span>
+        </div>`;
+      }).join('');
+      return `<div class="bil-section"><div class="bil-title">${baslik}</div>${bars}</div>`;
+    };
+
+    modal.querySelector('.modal-body').innerHTML=`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div class="bil-stat-box">
+          <div class="bil-stat-label">Kaynak</div>
+          <div class="bil-stat-val" style="font-size:.85rem">${d.veri_var?d.kaynak:'Veri Yok'}</div>
+        </div>
+        <div class="bil-stat-box">
+          <div class="bil-stat-label">Temel Skor</div>
+          <div class="bil-stat-val" style="color:${skorRenk}">${d.temel_skor>0?'+':''}${d.temel_skor} / 4</div>
+        </div>
+        <div class="bil-stat-box">
+          <div class="bil-stat-label">Kar Durumu</div>
+          <div class="bil-stat-val" style="color:${kdRenk}">${d.kar_durumu}</div>
+        </div>
+        <div class="bil-stat-box">
+          <div class="bil-stat-label">Net Borç/FAVÖK</div>
+          <div class="bil-stat-val" style="color:${d.borc_favok>5?'var(--red)':'var(--text)'}">${d.borc_favok!=null?d.borc_favok+'x':'—'}</div>
+        </div>
+        ${d.pe?`<div class="bil-stat-box"><div class="bil-stat-label">F/K</div><div class="bil-stat-val">${d.pe}x</div></div>`:''}
+        ${d.pb?`<div class="bil-stat-box"><div class="bil-stat-label">PD/DD</div><div class="bil-stat-val" style="color:${d.pb<1?'var(--green)':d.pb>5?'var(--red)':'var(--text)'}">${d.pb}x</div></div>`:''}
+        ${d.roe!=null?`<div class="bil-stat-box"><div class="bil-stat-label">ROE</div><div class="bil-stat-val" style="color:${d.roe>20?'var(--green)':d.roe<0?'var(--red)':'var(--text)'}">%${d.roe}</div></div>`:''}
+        ${d.net_marj!=null?`<div class="bil-stat-box"><div class="bil-stat-label">Net Marj</div><div class="bil-stat-val" style="color:${d.net_marj>15?'var(--green)':d.net_marj<0?'var(--red)':'var(--text)'}">%${d.net_marj}</div></div>`:''}
+      </div>
+      ${d.zayif_bilanc?`<div style="background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.3);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:.8rem;color:var(--red)"><b>${d.zayif_bilanc_etiket}</b><br><span style="color:var(--muted)">${d.zayif_bilanc_sebep}</span></div>`:''}
+      ${d.yatirimlik?`<div style="background:rgba(160,0,255,.1);border:1px solid rgba(160,0,255,.3);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:.8rem;color:#bf6fff">💎 <b>YATIRIMLIK/KELEPİR adayı</b> — PD/DD defter değerinin altında ve teknik pozitif uyumsuzluk onayladı.</div>`:''}
+      ${grafik(d.net_kar_grafik,'📈 Net Kar / Zarar')}
+      ${grafik(d.ciro_grafik,'💼 Ciro / Hasılat')}
+      ${grafik(d.favok_grafik,'⚡ FAVÖK')}
+      <div class="bil-section"><div class="bil-title">🔍 Bilanço Analizi</div>${uyariHTML}</div>
+      ${d.oran_uyarilar&&d.oran_uyarilar.length?`<div class="bil-section"><div class="bil-title">📊 Oran Analizi</div>${d.oran_uyarilar.map(u=>`<div class="bil-item">${u}</div>`).join('')}</div>`:''}
+      <div style="text-align:center;margin-top:12px">
+        <button class="btn" onclick="document.getElementById('bilanco-modal').remove()">✕ Kapat</button>
+      </div>`;
+  }catch(e){
+    modal.querySelector('.modal-body').innerHTML=`<p style="color:var(--red)">Hata: ${e.message}</p>`;
+  }
 }
 
 // ── BAŞLAT ──
@@ -1444,13 +1630,14 @@ def index():
 def api_data():
     with LOCK:
         from bot_engine import makro_risk_analizi
-        return jsonify({
+        payload = {
             "data":       _cache["data"],
             "guncelleme": _cache["guncelleme"],
             "yukleniyor": _cache["yukleniyor"],
             "endeks":     bist100_durumu(),
             "makro":      makro_risk_analizi(),
-        })
+        }
+        return jsonify(_sanitize(payload))
 
 @app.route("/api/tara")
 def api_tara():
@@ -1462,19 +1649,24 @@ def api_tara():
 
 @app.route("/api/portfoy")
 def api_portfoy():
-    return jsonify({"pozlar": db_portfoy_al()})
+    try:
+        return jsonify({"pozlar": db_portfoy_al()})
+    except Exception as e:
+        return jsonify({"pozlar": [], "hata": str(e)}), 500
 
 @app.route("/api/portfoy/al", methods=["POST"])
 def api_portfoy_al_route():
     try:
         d = request.get_json(silent=True) or {}
-        sembol = str(d.get("sembol", "")).strip().upper()
-        adet   = float(d.get("adet", 0))
-        fiyat  = float(d.get("fiyat", 0))
-        notlar = str(d.get("notlar", ""))
+        sembol    = str(d.get("sembol", "")).strip().upper()
+        adet      = float(d.get("adet", 0))
+        fiyat     = float(d.get("fiyat", 0))
+        notlar    = str(d.get("notlar", ""))
+        stop_loss = float(d["stop_loss"]) if d.get("stop_loss") else None
+        hedef_1   = float(d["hedef_1"])   if d.get("hedef_1")   else None
         if not sembol or adet <= 0 or fiyat <= 0:
             return jsonify({"ok": False, "hata": "Sembol, adet ve fiyat zorunlu"}), 400
-        db_portfoy_ekle(sembol, adet, fiyat, notlar)
+        db_portfoy_ekle(sembol, adet, fiyat, notlar, stop_loss, hedef_1)
         return jsonify({"ok": True})
     except (ValueError, TypeError) as e:
         return jsonify({"ok": False, "hata": str(e)}), 400
@@ -1494,11 +1686,17 @@ def api_portfoy_sat_route():
 
 @app.route("/api/gecmis")
 def api_gecmis():
-    return jsonify({"islemler": db_gecmis_al()})
+    try:
+        return jsonify({"islemler": db_gecmis_al()})
+    except Exception as e:
+        return jsonify({"islemler": [], "hata": str(e)}), 500
 
 @app.route("/api/alarmlar")
 def api_alarmlar():
-    return jsonify({"alarmlar": db_alarm_listele(sadece_aktif=True)})
+    try:
+        return jsonify({"alarmlar": db_alarm_listele(sadece_aktif=True)})
+    except Exception as e:
+        return jsonify({"alarmlar": [], "hata": str(e)}), 500
 
 @app.route("/api/alarmlar/ekle", methods=["POST"])
 def api_alarm_ekle():
@@ -1530,7 +1728,10 @@ def api_alarm_sil():
 
 @app.route("/api/telegram/test")
 def api_telegram_test():
-    return jsonify(telegram_test())
+    try:
+        return jsonify(telegram_test())
+    except Exception as e:
+        return jsonify({"ok": False, "hata": str(e)}), 500
 
 @app.route("/api/backtest")
 def api_backtest():
@@ -1550,6 +1751,37 @@ def api_backtest():
         return jsonify({"ok": False, "hata": str(e)}), 400
 
 # ─── BAŞLAT ───────────────────────────────────────────────────────
+@app.route("/api/bilanco")
+def bilanco_endpoint():
+    """Hisse bilanço verisi — isyatirimhisse'den."""
+    sembol = request.args.get("sembol", "").upper().strip()
+    if not sembol:
+        return jsonify({"hata": "sembol gerekli"})
+    try:
+        from isyatirim_veri import bilanco_ozet_json
+        return jsonify(bilanco_ozet_json(sembol))
+    except ImportError:
+        # Fallback: bot_engine temel_analiz
+        from bot_engine import temel_analiz
+        t = temel_analiz(sembol + ".IS")
+        return jsonify({
+            "veri_var":    bool(t.get("pe") or t.get("pb")),
+            "kaynak":      "yfinance",
+            "kar_durumu":  t.get("kar_durumu", "belirsiz"),
+            "temel_skor":  t.get("temel_skor", 0),
+            "uyarilar":    t.get("uyarilar", []),
+            "borc_favok":  None,
+            "net_borc":    None,
+            "net_kar_grafik": [],
+            "ciro_grafik":    [],
+            "favok_grafik":   [],
+            "pe": t.get("pe"),
+            "pb": t.get("pb"),
+        })
+    except Exception as e:
+        return jsonify({"hata": str(e), "veri_var": False})
+
+
 if __name__ == "__main__":
     db_init()
     db_alarm_init()

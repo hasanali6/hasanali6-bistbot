@@ -22,9 +22,24 @@ from contextlib import contextmanager
 
 import numpy as np
 import pandas as pd
-import yfinance as yf
 
 warnings.filterwarnings("ignore")
+
+# ─── İş Yatırım Veri Katmanı ─────────────────────────────────────
+try:
+    from isyatirim_veri import ohlcv_al as _ISY_OHLCV, bilanco_al as _ISY_BILANCO
+    _HAS_ISY_VERI = True
+    print("[BOT] ✅ isyatirim_veri modülü yüklendi")
+except ImportError:
+    _HAS_ISY_VERI = False
+    print("[BOT] ⚠ isyatirim_veri bulunamadı")
+
+# yfinance — sadece fallback ve intraday için
+try:
+    import yfinance as yf
+    _HAS_YF = True
+except ImportError:
+    _HAS_YF = False
 
 # ─── yfinance STDERR SUSTUR ───────────────────────────────────────
 # "possibly delisted; no price data found" mesajları terminalde görünmesin.
@@ -196,11 +211,22 @@ def _flatten(df: pd.DataFrame) -> pd.DataFrame:
 
 def _indir(sembol: str, period: str, interval: str) -> Optional[pd.DataFrame]:
     """
-    Veri indir. Sadece gerçek delisting hatalarında blacklist'e ekle.
-    Ağ hatası, timeout vs. için BLACKLIST'E EKLEME.
-    yfinance'in console spam'ini _sessiz() ile susturuyoruz.
+    Veri indir — isyatirimhisse önce (günlük), yfinance fallback.
+    Sadece gerçek delisting hatalarında blacklist'e ekle.
     """
     try:
+        # isyatirim_veri modülü varsa kullan (günlük veriler için)
+        if _HAS_ISY_VERI and interval == "1d":
+            df = _ISY_OHLCV(sembol.replace(".IS", ""), period=period, interval="1d")
+            if df is not None and not df.empty:
+                needed = {"Open", "High", "Low", "Close", "Volume"}
+                if needed.issubset(df.columns):
+                    _log(f"_indir({sembol}): isyatirimhisse ✅")
+                    return df
+
+        # yfinance fallback (intraday veya isyatirimhisse başarısız)
+        if not _HAS_YF:
+            return None
         with _sessiz():
             df = yf.download(sembol, period=period, interval=interval,
                              progress=False, auto_adjust=True)
@@ -810,18 +836,31 @@ def bist100_durumu() -> dict:
         if _endeks_cache["data"] and (now - _endeks_cache["ts"]) < _ENDEKS_TTL:
             return _endeks_cache["data"]
     try:
-        with _sessiz():
-            df = yf.download("XU100.IS", period="5d", interval="1d",
-                             progress=False, auto_adjust=True)
+        df = None
+        # isyatirim_veri modülü varsa endeks verisini oradan al
+        if _HAS_ISY_VERI:
+            try:
+                from isyatirim_veri import endeks_al
+                df = endeks_al("XU100")
+            except Exception:
+                df = None
+
+        # yfinance fallback
+        if (df is None or df.empty) and _HAS_YF:
+            with _sessiz():
+                df = yf.download("XU100.IS", period="5d", interval="1d",
+                                 progress=False, auto_adjust=True)
+            if df is not None and not df.empty:
+                df = _flatten(df)
+
         if df is None or df.empty:
             return _BOSTA
-        df = _flatten(df)
         cl = df["Close"].squeeze()
         if len(cl) < 2:
             return _BOSTA
         son  = float(cl.iloc[-1])
         prev = float(cl.iloc[-2])
-        degis = round((son - prev) / prev * 100, 2)
+        degis = round((son - prev) / prev * 100, 2) if prev != 0 else 0.0
         sonuc = {
             "fiyat":   round(son, 1),
             "degisim": degis,
@@ -945,30 +984,66 @@ def endeks_guc_skoru(hisse_degisim: float) -> dict:
     }
 
 
-# ─── TEMEL ANALİZ v2.0 ───────────────────────────────────────────
-# Piyasa değeri kategorileri (TL cinsinden yaklaşık)
-# yfinance USD verir, kaba dönüşüm için çarpan kullanılır
-_PIYASA_DEGERI_ESIK = {
-    "kucuk":  5_000_000_000,   # < 5 milyar TL  → küçük hisse
-    "orta":   20_000_000_000,  # 5–20 milyar TL → orta
-    # ≥ 20 milyar → büyük
-}
+# ─── TARİHSEL GETİRİ ─────────────────────────────────────────────
+def _tarihsel_getiri(sembol: str) -> dict:
+    """
+    1 ay, 3 ay, 6 ay, 1 yıl, 3 yıl geriye dönük yüzde getiri hesapla.
+    yfinance üzerinden çeker. Hata varsa None döner.
+    """
+    bos = {"1a": None, "3a": None, "6a": None, "1y": None, "3y": None}
+    if not _HAS_YF:
+        return bos
+    try:
+        with _yf_quiet():
+            df = yf.download(sembol, period="3y", interval="1d",
+                             auto_adjust=True, progress=False)
+        if df is None or df.empty or len(df) < 20:
+            return bos
+        close = df["Close"].squeeze()
+        if hasattr(close, "columns"):          # MultiIndex fallback
+            close = close.iloc[:, 0]
+        close = close.dropna()
+        if len(close) < 20:
+            return bos
 
+        son  = float(close.iloc[-1])
+        n    = len(close)
+
+        def _get(gun: int):
+            idx = n - gun - 1
+            if idx < 0:
+                return None
+            bas = float(close.iloc[idx])
+            if bas <= 0:
+                return None
+            return round((son - bas) / bas * 100, 2)
+
+        return {
+            "1a":  _get(21),    # ~1 ay
+            "3a":  _get(63),    # ~3 ay
+            "6a":  _get(126),   # ~6 ay
+            "1y":  _get(252),   # ~1 yıl
+            "3y":  _get(756),   # ~3 yıl
+        }
+    except Exception:
+        return bos
+
+
+# ─── TEMEL ANALİZ v3.0 — isyatirimhisse + yfinance fallback ─────
 def temel_analiz(sembol: str) -> dict:
     """
-    F/K, PD/DD, Net Kar Büyümesi + Temel Skor (0..3) hesaplar.
-    Küçük hisseler için değerleme filtresi gevşetilir.
-
+    Gerçek KAP/İş Yatırım bilanço verisini kullanır.
+    isyatirimhisse → yfinance fallback
+    
     Returns:
-        pe, pb, eps                     — ham oranlar
-        net_kar_buyume                  — % büyüme (None=veri yok)
+        pe, pb                          — oran
+        net_kar_buyume                  — % (None=yok)
         kar_durumu                      — "artiyor"|"azaliyor"|"zarar"|"belirsiz"
-        piyasa_degeri_m                 — milyon TL (yaklaşık)
-        hisse_tipi                      — "kucuk"|"orta"|"buyuk"
-        temel_skor                      — 0..3
-        pahali_puan                     — -2..+2 (eski uyumluluk için)
+        temel_skor                      — 0..4
+        pahali_puan                     — -2..+2 (uyumluluk)
         uyarilar                        — liste
         gunun_firsati                   — bool
+        bilanco                         — ham bilanço dict
     """
     _BOSTA = {
         "pe": None, "pb": None, "eps": None,
@@ -976,196 +1051,107 @@ def temel_analiz(sembol: str) -> dict:
         "piyasa_degeri_m": None, "hisse_tipi": "belirsiz",
         "temel_skor": 0, "pahali_puan": 0,
         "uyarilar": [], "gunun_firsati": False,
+        "bilanco": None,
+        "borc_oz_orani": None, "nakit_m": None,
     }
+
     try:
-        ticker = yf.Ticker(sembol)
-        info   = ticker.info or {}
-
-        pe  = info.get("trailingPE")
-        pb  = info.get("priceToBook")
-        eps = info.get("trailingEps")
-
-        # ── Borçluluk & Nakit Akışı ───────────────────────────────
-        borc_oz_orani  = info.get("debtToEquity")        # Borç/Özkaynak %
-        nakit_usd      = info.get("freeCashflow")        # Serbest nakit akışı
-        faiz_karsilama = info.get("ebitdaMargins")       # FAVÖK marjı (proxy)
-        nakit_m        = round(nakit_usd / 1e6, 1) if nakit_usd else None
-
-        # ── Piyasa Değeri & Hisse Tipi ────────────────────────────
-        mc_usd = info.get("marketCap")     # USD
-        # Kaba USD→TL: sabit 35 (Railway'de canlı kur çekilebilir, şimdilik sabit)
-        _USD_TRY = 35.0
-        piyasa_degeri_m = round(mc_usd * _USD_TRY / 1_000_000, 0) if mc_usd else None
-
-        if piyasa_degeri_m:
-            if piyasa_degeri_m < _PIYASA_DEGERI_ESIK["kucuk"] / 1e6:
-                hisse_tipi = "kucuk"
-            elif piyasa_degeri_m < _PIYASA_DEGERI_ESIK["orta"] / 1e6:
-                hisse_tipi = "orta"
-            else:
-                hisse_tipi = "buyuk"
+        # ── isyatirimhisse bilanço verisi ─────────────────────────
+        if _HAS_ISY_VERI:
+            bilanco = _ISY_BILANCO(sembol.replace(".IS", ""))
         else:
-            hisse_tipi = "belirsiz"
+            bilanco = {"veri_var": False, "kaynak": "yok"}
 
-        # ── Net Kar Büyümesi ──────────────────────────────────────
-        # yfinance earnings_quarterly → son 2 çeyrek karı karşılaştır
-        net_kar_buyume = None
-        kar_durumu     = "belirsiz"
-        try:
-            # Yöntem 1: earningsGrowth (TTM büyüme oranı)
-            eg = info.get("earningsGrowth")        # ör. 0.25 = %25 büyüme
+        # Fallback: yfinance ile mevcut mantığı koru
+        if not bilanco.get("veri_var") and _HAS_YF:
+            try:
+                ticker = yf.Ticker(sembol)
+                info   = ticker.info or {}
+            except Exception:
+                info = {}
+
+            pe  = info.get("trailingPE")
+            pb  = info.get("priceToBook")
+            eg  = info.get("earningsGrowth")
+            de  = info.get("debtToEquity")
+
+            kar_durumu = "belirsiz"
             if eg is not None:
-                net_kar_buyume = round(eg * 100, 1)
-                if eg > 0:
-                    kar_durumu = "artiyor"
-                elif eg < -0.10:
-                    kar_durumu = "azaliyor"
-                else:
-                    kar_durumu = "sabit"
-            else:
-                # Yöntem 2: quarterly earnings tablosu
-                qe = ticker.quarterly_earnings
-                if qe is not None and len(qe) >= 2:
-                    son_kar  = float(qe["Earnings"].iloc[-1])
-                    prev_kar = float(qe["Earnings"].iloc[-2])
-                    if prev_kar and prev_kar != 0:
-                        buyume = (son_kar - prev_kar) / abs(prev_kar) * 100
-                        net_kar_buyume = round(buyume, 1)
-                        if son_kar < 0:
-                            kar_durumu = "zarar"
-                        elif buyume > 5:
-                            kar_durumu = "artiyor"
-                        elif buyume < -10:
-                            kar_durumu = "azaliyor"
-                        else:
-                            kar_durumu = "sabit"
-        except Exception:
-            pass
+                if eg > 0: kar_durumu = "artiyor"
+                elif eg < -0.1: kar_durumu = "azaliyor"
 
-        # ── Puanlama ─────────────────────────────────────────────
-        temel_skor  = 0   # 0..3 (Günün Fırsatı = 3)
-        pahali_puan = 0   # eski uyumluluk (-2..+2)
-        uyarilar    = []
+            uyarilar   = []
+            temel_skor = 0
+            pahali_puan = 0
 
-        # 1) F/K Puanı
-        # Küçük hisseler için eşik yüksek (büyüme potansiyeli daha yüksek)
-        if pe and pe > 0:
-            if hisse_tipi == "kucuk":
-                fk_pahali = pe > 60
-                fk_ucuz   = pe < 20
-            else:
-                fk_pahali = pe > 30
-                fk_ucuz   = pe < 12
+            if pe and pe > 0:
+                if pe > 30:   pahali_puan -= 1; uyarilar.append(f"⚠ F/K Yüksek ({pe:.1f}x)")
+                elif pe < 12: temel_skor += 1; pahali_puan += 1; uyarilar.append(f"✅ F/K Ucuz ({pe:.1f}x)")
+                else:         uyarilar.append(f"F/K Normal ({pe:.1f}x)")
 
-            if fk_pahali:
-                pahali_puan -= 1
-                uyarilar.append(f"🚨 DİKKAT: HİSSE PAHALI — F/K {pe:.1f}x")
-            elif pe > (50 if hisse_tipi == "kucuk" else 20):
-                uyarilar.append(f"⚠ F/K Yüksek ({pe:.1f}x)")
-            elif fk_ucuz:
-                temel_skor  += 1
-                pahali_puan += 1
-                uyarilar.append(f"✅ F/K Ucuz ({pe:.1f}x)")
-            else:
-                uyarilar.append(f"F/K Normal ({pe:.1f}x)")
-        else:
-            uyarilar.append("F/K — veri yok")
+            if kar_durumu == "artiyor":   temel_skor += 1; pahali_puan += 1
+            elif kar_durumu == "zarar":   temel_skor -= 2; pahali_puan -= 1; uyarilar.append("🚨 Zararda")
+            elif kar_durumu == "azaliyor":pahali_puan -= 1; uyarilar.append("⚠ Kar Azalıyor")
 
-        # 2) PD/DD Puanı
-        if pb and pb > 0:
-            if hisse_tipi == "kucuk":
-                pddd_pahali = pb > 10
-                pddd_deger  = pb < 3
-            else:
-                pddd_pahali = pb > 5
-                pddd_deger  = pb < 1.5
+            if de and de > 200: pahali_puan -= 1; uyarilar.append(f"🚨 Yüksek Borç D/E {de:.0f}%")
+            elif de and de < 30: pahali_puan += 1; uyarilar.append(f"✅ Düşük Borç D/E {de:.0f}%")
 
-            if pddd_pahali:
-                pahali_puan -= 1
-                uyarilar.append(f"⚠ PD/DD Pahalı ({pb:.1f}x)")
-            elif pddd_deger:
-                temel_skor  += 1
-                pahali_puan += 1
-                uyarilar.append(f"✅ PD/DD Değer ({pb:.1f}x)")
-            else:
-                uyarilar.append(f"PD/DD Normal ({pb:.1f}x)")
-        else:
-            uyarilar.append("PD/DD — veri yok")
+            return {
+                "pe": round(float(pe), 1) if pe and pe > 0 else None,
+                "pb": round(float(pb), 2) if pb and pb > 0 else None,
+                "eps": None,
+                "net_kar_buyume": round(eg * 100, 1) if eg else None,
+                "kar_durumu": kar_durumu,
+                "piyasa_degeri_m": None, "hisse_tipi": "belirsiz",
+                "temel_skor": max(0, min(3, temel_skor)),
+                "pahali_puan": pahali_puan,
+                "uyarilar": uyarilar,
+                "gunun_firsati": temel_skor >= 3,
+                "bilanco": None,
+                "borc_oz_orani": de,
+                "nakit_m": None,
+            }
 
-        # 3) Net Kar Büyümesi Puanı
-        if kar_durumu == "artiyor":
-            temel_skor += 1
-            uyarilar.append(
-                f"✅ Kar Büyüyor "
-                f"({'+' if net_kar_buyume and net_kar_buyume > 0 else ''}"
-                f"{net_kar_buyume:.1f}%)" if net_kar_buyume else "✅ Kar Büyüyor"
-            )
-        elif kar_durumu == "zarar":
-            pahali_puan -= 1
-            uyarilar.append("🚨 Şirket ZARARDA — Güçlü Al verilmez")
-        elif kar_durumu == "azaliyor":
-            pahali_puan -= 1
-            uyarilar.append(
-                f"⚠ Kar Azalıyor "
-                f"({net_kar_buyume:.1f}%)" if net_kar_buyume else "⚠ Kar Azalıyor"
-            )
-        elif kar_durumu == "sabit":
-            uyarilar.append("➡ Kar Sabit")
-        else:
-            uyarilar.append("Net Kar — veri yok")
+        # ── isyatirimhisse verisi ile temel skor hesapla ──────────
+        temel_skor  = bilanco.get("temel_skor", 0)
+        kar_durumu  = bilanco.get("kar_durumu", "belirsiz")
+        uyarilar    = bilanco.get("uyarilar", [])
 
-        # 4) Borçluluk Analizi
-        borc_uyari = ""
-        if borc_oz_orani is not None:
-            # yfinance debtToEquity → zaten % cinsinden (ör. 150 = %150)
-            if borc_oz_orani > 200:
-                pahali_puan -= 1
-                borc_uyari = f"🚨 YÜKSEK BORÇ: D/E {borc_oz_orani:.0f}%"
-                uyarilar.append(borc_uyari)
-            elif borc_oz_orani > 100:
-                uyarilar.append(f"⚠ Borçlu Şirket: D/E {borc_oz_orani:.0f}%")
-            elif borc_oz_orani < 30:
-                pahali_puan += 1
-                uyarilar.append(f"✅ Düşük Borç: D/E {borc_oz_orani:.0f}%")
-            else:
-                uyarilar.append(f"Borç D/E {borc_oz_orani:.0f}%")
-        else:
-            uyarilar.append("Borç/Özkaynak — veri yok")
+        # pahali_puan uyumluluk (eski kod ile uyumlu)
+        pahali_puan = 0
+        if kar_durumu == "artiyor":    pahali_puan += 1
+        elif kar_durumu == "zarar":    pahali_puan -= 2
+        elif kar_durumu == "azaliyor": pahali_puan -= 1
 
-        # 5) Nakit Akışı
-        if nakit_usd is not None:
-            if nakit_usd > 0:
-                uyarilar.append(f"✅ Pozitif Nakit Akışı ({nakit_m:+.0f}M$)")
-            else:
-                uyarilar.append(f"⚠ Negatif Nakit Akışı ({nakit_m:+.0f}M$)")
+        borc_favok = bilanco.get("borc_favok")
+        if borc_favok is not None:
+            if borc_favok > 10:   pahali_puan -= 2
+            elif borc_favok > 5:  pahali_puan -= 1
+            elif borc_favok < 2:  pahali_puan += 1
 
-        # Küçük hisse özel notu
-        if hisse_tipi == "kucuk":
-            uyarilar.append("📌 Küçük Hisse — değerleme filtresi gevşek")
-
-        # Günün Fırsatı: teknik iyi + temel 3/3
+        # Günün fırsatı: temel skor >= 3
         gunun_firsati = (temel_skor >= 3)
 
         return {
-            "pe":              round(float(pe),  1) if pe  and pe  > 0 else None,
-            "pb":              round(float(pb),  2) if pb  and pb  > 0 else None,
-            "eps":             round(float(eps), 2) if eps           else None,
-            "net_kar_buyume":  net_kar_buyume,
+            "pe":              bilanco.get("pe"),
+            "pb":              bilanco.get("pb"),
+            "eps":             None,
+            "net_kar_buyume":  None,
             "kar_durumu":      kar_durumu,
-            "borc_oz_orani":   round(float(borc_oz_orani), 1) if borc_oz_orani is not None else None,
-            "nakit_m":         nakit_m,
-            "piyasa_degeri_m": piyasa_degeri_m,
-            "hisse_tipi":      hisse_tipi,
-            "temel_skor":      temel_skor,
-            "pahali_puan":     pahali_puan,
+            "piyasa_degeri_m": None,
+            "hisse_tipi":      "belirsiz",
+            "temel_skor":      max(-3, min(4, temel_skor)),
+            "pahali_puan":     max(-3, min(3, pahali_puan)),
             "uyarilar":        uyarilar,
             "gunun_firsati":   gunun_firsati,
+            "bilanco":         bilanco,        # ham bilanço objesi
+            "borc_oz_orani":   None,
+            "nakit_m":         None,
         }
+
     except Exception as e:
         _log(f"temel_analiz({sembol}): {e}")
         return _BOSTA
-
-# ─── ZAMANSAL ANALİZ (ANA FONKSİYON) ────────────────────────────
 def zamansal_analiz(sembol: str) -> Optional[dict]:
     """
     Günlük + Haftalık + Haber + Temel analizi birleştirip karar üretir.
@@ -1259,8 +1245,8 @@ def zamansal_analiz(sembol: str) -> Optional[dict]:
             elif atr_oran > 1.5:  vg, vt, va = "1-3 hafta",  "ORTA", "Devam sinyali"
             else:                 vg, vt, va = "1-3 ay",     "UZUN", "Düşük volatilite"
             sl = round(fiyat - 1.5 * atr_v, 2)
-            h1 = round(fiyat + 2.0 * atr_v, 2)
-            h2 = round(fiyat + 3.5 * atr_v, 2)
+            h1 = round(fiyat + 1.5 * atr_v, 2)   # ATR x1.5 (garanti)
+            h2 = round(fiyat + 3.0 * atr_v, 2)   # ATR x3.0
             p  = fiyat - sl
             rg = round((h1 - fiyat) / p, 2) if p > 0 else 0.0
         elif "sat" in kk:
@@ -1952,6 +1938,11 @@ def zamansal_analiz_v6(sembol: str) -> Optional[dict]:
         haber_skor = 0.0
         riskli_haber    = False
         risk_sebep      = []
+        # Tarihsel getiri — hata olursa bos dict
+        try:
+            _tg = _tarihsel_getiri(sembol)
+        except Exception:
+            _tg = {"1a": None, "3a": None, "6a": None, "1y": None, "3y": None}
         try:
             from haber_analiz import haber_analizi, haber_skor_etiketi
             hv = haber_analizi(sembol)
@@ -2140,18 +2131,20 @@ def zamansal_analiz_v6(sembol: str) -> Optional[dict]:
             elif kk == "bekle":
                 kk = "zayif_sat"
 
-        # ── Stop / Hedef ─────────────────────────────────────────
+        # ── Stop / Hedef — ATR x1.5 Hedef-1 ────────────────────
+        # Hedef-1 = ATR x 1.5 (daha garanti)
+        # Hedef-2 = ATR x 3.0 (potansiyel üst hedef)
         atr_oran = (atr_v / fiyat * 100) if fiyat > 0 else 2.0
         if "al" in kk and kk != "piyasa_riskli":
             sl = round(fiyat - 1.5 * atr_v, 2)
-            h1 = round(fiyat + 2.0 * atr_v, 2)
-            h2 = round(fiyat + 3.5 * atr_v, 2)
+            h1 = round(fiyat + 1.5 * atr_v, 2)   # ← ATR x1.5 (daha yakın, daha güvenli)
+            h2 = round(fiyat + 3.0 * atr_v, 2)   # ← ATR x3.0
             p  = fiyat - sl
             rg = round((h1 - fiyat) / p, 2) if p > 0 else 0.0
         elif "sat" in kk:
             sl = round(fiyat + 1.5 * atr_v, 2)
-            h1 = round(fiyat - 2.0 * atr_v, 2)
-            h2 = round(fiyat - 3.5 * atr_v, 2)
+            h1 = round(fiyat - 1.5 * atr_v, 2)
+            h2 = round(fiyat - 3.0 * atr_v, 2)
             p  = sl - fiyat
             rg = round((fiyat - h1) / p, 2) if p > 0 else 0.0
         else:
@@ -2159,6 +2152,61 @@ def zamansal_analiz_v6(sembol: str) -> Optional[dict]:
 
         # ── Dinamik vade ─────────────────────────────────────────
         vg, vt, va = dinamik_vade(atr_oran, gunluk["rsi"], uk, ma_trend)
+
+        # ── ZAYIF BİLANÇO Kontrolü ───────────────────────────────
+        zayif_bilanc      = False
+        zayif_bilanc_uyari = ""
+        try:
+            from isyatirim_veri import zayif_bilanc_kontrol
+            zb = zayif_bilanc_kontrol(sembol.replace(".IS", ""))
+            if zb["risk"]:
+                zayif_bilanc       = True
+                zayif_bilanc_uyari = zb["etiket"]
+                # AL sinyallerini düşür ama tamamen engelleme
+                if kk == "guclu_al":
+                    kk = "al"
+                tum_sinyaller_ekleme = zb["etiket"]
+            else:
+                tum_sinyaller_ekleme = ""
+        except Exception:
+            tum_sinyaller_ekleme = ""
+
+        # ── TAVAN/POMPA Koruması (%9.5+) ─────────────────────────
+        tavan_uyari = ""
+        if abs(degisim) >= 9.5:
+            if degisim >= 9.5:
+                tavan_uyari = f"🚨 DİKKAT: TAVAN FİYAT ({degisim:+.1f}%) — DÜZELTME RİSKİ"
+                if kk in ("guclu_al", "al"):
+                    kk = "zayif_al"   # Tavanda alım yapma!
+            else:
+                tavan_uyari = f"⚠ DİP FİYAT ({degisim:+.1f}%) — Satış baskısı çok yüksek"
+
+        # ── YATIRIMLıK / KELEPİR Tespiti ─────────────────────────
+        # PD/DD < 1.0 + Pozitif Uyumsuzluk → KELEPİR adayı
+        yatirimlik = False
+        yatirimlik_etiket = ""
+        try:
+            from isyatirim_veri import oranlar_al
+            oran_v = oranlar_al(sembol.replace(".IS", ""))
+            pd_dd  = oran_v.get("pd_dd")
+            if (pd_dd and pd_dd < 1.0
+                    and div_v.get("tip") == "pozitif"
+                    and ma_trend == "ustunde"):
+                yatirimlik = True
+                yatirimlik_etiket = f"💎 YATIRIMLIK/KELEPİR (PD/DD={pd_dd:.2f}x)"
+                # Sinyali terfi et
+                if kk == "al":
+                    kk = "guclu_al"
+                elif kk == "zayif_al":
+                    kk = "al"
+        except Exception:
+            oran_v = {}
+
+        # ── MA200 ALTI → TEPKİ YÜKSELİŞİ Etiketi ────────────────
+        # MA200 altında AL yerine "TEPKİ YÜKSELİŞİ BEKLENTİSİ" yaz
+        tepki_modu = False
+        if ma_trend == "alti" and kk in ("guclu_al", "al", "zayif_al"):
+            tepki_modu = True
 
         KE = {
             "guclu_al":       "🟢 GÜÇLÜ AL",
@@ -2185,6 +2233,12 @@ def zamansal_analiz_v6(sembol: str) -> Optional[dict]:
             tum_sinyaller.append(f"Sektör({sek_v['sektor']}): {sek_v['etiket']}")
         if ma200_uyari:
             tum_sinyaller.append(ma200_uyari)
+        if tum_sinyaller_ekleme:
+            tum_sinyaller.append(tum_sinyaller_ekleme)
+        if tavan_uyari:
+            tum_sinyaller.append(tavan_uyari)
+        if yatirimlik_etiket:
+            tum_sinyaller.append(yatirimlik_etiket)
 
         # Birleşik karar etiketi
         _onaylar = " | ".join(x for x in [gap_onay, div_onay] if x)
@@ -2193,7 +2247,7 @@ def zamansal_analiz_v6(sembol: str) -> Optional[dict]:
         sik_onay = ""
         if sik_v["sikisma"] and sik_v["kilis_yonu"] == "yukari" and sik_v["puan"] >= 2:
             sik_onay = "ZAMANSALLIK ONAYLI"
-            if kk == "al" and not piyasa_riskli:
+            if kk == "al" and not piyasa_riskli and not zayif_bilanc and not tavan_uyari:
                 kk = "guclu_al"
         elif sik_v["sikisma"] and sik_v["kilis_yonu"] == "asagi":
             if kk in ("al", "zayif_al"):
@@ -2207,7 +2261,26 @@ def zamansal_analiz_v6(sembol: str) -> Optional[dict]:
         if st_yon_gunluk == -1 and kk == "guclu_al":
             kk = "al"   # SuperTrend kırmızı → terfi yok
 
-        karar_etiketi = KE.get(kk, kk) + (f" ⚡{_onaylar}" if _onaylar else "")
+        # Temel karar etiketi
+        _base_label = KE.get(kk, kk)
+
+        # MA200 altında → TEPKİ YÜKSELİŞİ BEKLENTİSİ ekle
+        if tepki_modu:
+            _base_label = _base_label + " ⚡TEPKİ YÜKSELİŞİ BEKLENTİSİ"
+
+        # Zayıf bilanço uyarısı ekle
+        if zayif_bilanc_uyari:
+            _base_label = _base_label + f" | {zayif_bilanc_uyari}"
+
+        # Tavan uyarısı ekle
+        if tavan_uyari:
+            _base_label = _base_label + f" | 🚨TAVAN"
+
+        # Yatırımlık etiketi ekle
+        if yatirimlik:
+            _base_label = _base_label + " | 💎KELEPİR"
+
+        karar_etiketi = _base_label + (f" ⚡{_onaylar}" if _onaylar else "")
 
         return {
             "sembol":           sembol,
@@ -2255,9 +2328,16 @@ def zamansal_analiz_v6(sembol: str) -> Optional[dict]:
             "piyasa_riskli":    piyasa_riskli,
             "riskli_haber":     riskli_haber,
             "riskli_haber_uyari": riskli_haber_uyari,
+            "zayif_bilanc":     zayif_bilanc,
+            "zayif_bilanc_uyari": zayif_bilanc_uyari,
+            "tavan_uyari":      tavan_uyari,
+            "yatirimlik":       yatirimlik,
+            "yatirimlik_etiket": yatirimlik_etiket,
+            "tepki_modu":       tepki_modu,
             "seans":            seans_v,
             "seans_uyari":      seans_uyari,
             "endeks_guc":       eguc_v,
+            "tarihsel_getiri": _tg,
             "guncelleme":       datetime.now().strftime("%H:%M:%S"),
             **haber_v,
         }
