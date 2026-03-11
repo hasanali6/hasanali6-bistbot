@@ -1,3 +1,4 @@
+git+https://github.com/urazakgul/isyatirimhisse.git
 yfinance>=0.2.36
 flask>=3.0.0
 pandas>=2.0.0
