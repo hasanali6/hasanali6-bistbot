@@ -859,11 +859,11 @@ async function veriYukle(){
     } else banner.style.display='none';
 
     // Seans uyarı banner
-    const seansBnr = document.getElementById('seans-banner');
-    if(d.seans&&d.seans.durum==='volatil'&&seansBnr){
-      seansBnr.textContent = d.seans.mesaj || '';
-      seansBnr.style.display='block';
-    } else if(seansBnr) seansBnr.style.display='none';
+    const sb = document.getElementById('seans-banner');
+    if(d.seans&&d.seans.durum==='volatil'&&sb){
+      sb.textContent = d.seans.mesaj || '';
+      sb.style.display='block';
+    } else if(sb) sb.style.display='none';
 
     // Makro risk banner
     const mk = d.makro||{};
