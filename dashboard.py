@@ -1590,4 +1590,4 @@ if __name__ == "__main__":
 ║  Durdurmak      →  Ctrl+C                                    ║
 ╚══════════════════════════════════════════════════════════════╝
     """)
-    app.run(debug=False, port=PORT, threaded=True)
+    app.run(host="0.0.0.0", debug=False, port=PORT, threaded=True)
