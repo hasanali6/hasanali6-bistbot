@@ -859,11 +859,11 @@ async function veriYukle(){
     } else banner.style.display='none';
 
     // Seans uyarı banner
-    const sb = document.getElementById('seans-banner');
-    if(d.seans&&d.seans.durum==='volatil'&&sb){
-      sb.textContent = d.seans.mesaj || '';
-      sb.style.display='block';
-    } else if(sb) sb.style.display='none';
+    const seansBnr = document.getElementById('seans-banner');
+    if(d.seans&&d.seans.durum==='volatil'&&seansBnr){
+      seansBnr.textContent = d.seans.mesaj || '';
+      seansBnr.style.display='block';
+    } else if(seansBnr) seansBnr.style.display='none';
 
     // Makro risk banner
     const mk = d.makro||{};
@@ -1488,37 +1488,8 @@ function haberDetay(sembol){
                 &nbsp;|&nbsp; RSI Tepe: ${d.divergence.rsi_tepe1} → ${d.divergence.rsi_tepe2} (düşüş)</div>`:''}
             </div>`:''}
         </div>
-        ${(()=>{
-          const tg = d.tarihsel_getiri||{};
-          const devir = [
-            {label:'1 Ay',   key:'1a'},
-            {label:'3 Ay',   key:'3a'},
-            {label:'6 Ay',   key:'6a'},
-            {label:'1 Yıl',  key:'1y'},
-            {label:'3 Yıl',  key:'3y'},
-          ];
-          const mevcut = devir.filter(x=>tg[x.key]!==null&&tg[x.key]!==undefined);
-          if(!mevcut.length) return '';
-          const cols = mevcut.map(x=>{
-            const v=tg[x.key];
-            const renk=v>0?'var(--green)':v<0?'var(--red)':'var(--muted)';
-            const ikon=v>0?'▲':v<0?'▼':'─';
-            return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;
-                      background:var(--bg3);border-radius:8px;padding:8px 10px;min-width:56px">
-              <div style="font-size:.6rem;color:var(--muted);font-weight:500">${x.label}</div>
-              <div style="font-family:var(--fm);font-weight:700;font-size:.9rem;color:${renk}">
-                ${v>0?'+':''}${v}%</div>
-              <div style="font-size:.65rem;color:${renk}">${ikon}</div>
-            </div>`;
-          }).join('');
-          return `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;
-                    padding:12px 16px;margin-bottom:14px">
-            <div style="font-size:.62rem;font-weight:600;letter-spacing:.8px;color:var(--muted);
-                  text-transform:uppercase;margin-bottom:10px">📈 Geçmiş Getiri</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">${cols}</div>
-          </div>`;
-        })()}
-        ${nedenHTML}${ahHTML}${teHTML}
+        ${getiriHTML(d)}
+        \${nedenHTML}\${ahHTML}\${teHTML}
         <div style="font-size:.62rem;font-weight:600;letter-spacing:.8px;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Son Haberler</div>
         ${haberHTML}
       </div>
@@ -1527,6 +1498,28 @@ function haberDetay(sembol){
 
 // ── HELPERS ──
 function round2(n){return Math.round(n*100)/100}
+
+function getiriHTML(d){
+  var tg=d.tarihsel_getiri||{};
+  var devir=[
+    {label:'1 Ay',key:'1a'},{label:'3 Ay',key:'3a'},
+    {label:'6 Ay',key:'6a'},{label:'1 Yil',key:'1y'},{label:'3 Yil',key:'3y'}
+  ];
+  var mevcut=devir.filter(function(x){return tg[x.key]!==null&&tg[x.key]!==undefined;});
+  if(!mevcut.length) return '';
+  var cols=mevcut.map(function(x){
+    var v=tg[x.key];
+    var renk=v>0?'var(--green)':v<0?'var(--red)':'var(--muted)';
+    var ikon=v>0?'&#9650;':v<0?'&#9660;':'&ndash;';
+    return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--bg3);border-radius:8px;padding:8px 10px;min-width:56px">'
+      +'<div style="font-size:.6rem;color:var(--muted);font-weight:500">'+x.label+'</div>'
+      +'<div style="font-family:var(--fm);font-weight:700;font-size:.9rem;color:'+renk+'">'+(v>0?'+':'')+v+'%</div>'
+      +'<div style="font-size:.65rem;color:'+renk+'">'+ikon+'</div></div>';
+  }).join('');
+  return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:14px">'
+    +'<div style="font-size:.62rem;font-weight:600;letter-spacing:.8px;color:var(--muted);text-transform:uppercase;margin-bottom:10px">&#128200; Gecmis Getiri</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+cols+'</div></div>';
+}
 async function yeniTara(){
   document.getElementById('scan-badge').style.display='block';
   await fetch('/api/tara');

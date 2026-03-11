@@ -265,6 +265,21 @@ def _cmd_top10(token: str, chat_id: str):
 
 def _cmd_tara(token: str, chat_id: str):
     """Tam tarama — uzun sürer, arka planda çalışır."""
+    # Dashboard zaten tarıyorsa kullanıcıya bildir
+    try:
+        import requests as _r
+        from config import PORT as _PORT
+        resp = _r.get(f"http://localhost:{_PORT}/api/data", timeout=3).json()
+        if resp.get("yukleniyor"):
+            _telegram_yaz(token, chat_id,
+                          "⏳ <b>Tarama zaten devam ediyor!</b>\n\n"
+                          "Dashboard arkaplanda tüm hisseleri tarıyor.\n"
+                          "Güçlü sinyal bulununca otomatik bildirim gelecek.\n"
+                          "Birkaç dakika bekle. 🙏")
+            return
+    except Exception:
+        pass  # Dashboard kapalıysa devam et
+
     _telegram_yaz(token, chat_id,
                   "🔍 <b>Tam BIST Taraması Başladı</b>\n\n"
                   "⏳ Bu işlem 10-30 dakika sürebilir.\n"

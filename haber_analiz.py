@@ -183,7 +183,7 @@ def google_news_haberleri(sembol: str) -> list:
     kod = sembol.replace(".IS", "")
     url = (f"https://news.google.com/rss/search"
            f"?q={kod}+borsa+hisse&hl=tr&gl=TR&ceid=TR:tr")
-    return [dict(h, kaynak="Google News") for h in _rss_cek(url)[:5]]
+    return [dict(h, kaynak="Google News") for h in _rss_cek(url, timeout=6)[:5]]
 
 _YEREL_RSS = {
     "KAP":         "https://www.kap.org.tr/tr/rss",

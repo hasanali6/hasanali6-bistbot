@@ -326,8 +326,26 @@ def gunluk_ozet_gonder(sonuclar: list) -> bool:
     return telegram_gonder(mesaj)
 
 # ─── VERİTABANI ───────────────────────────────────────────────────
+def _alarm_db() -> sqlite3.Connection:
+    """Alarm DB bağlantısı — tabloları garantile (lazy init)."""
+    c = sqlite3.connect(DB)
+    c.execute("PRAGMA journal_mode=WAL")
+    c.execute("""CREATE TABLE IF NOT EXISTS alarmlar (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        sembol       TEXT    NOT NULL,
+        tip          TEXT    NOT NULL,
+        hedef_fiyat  REAL    NOT NULL,
+        not_         TEXT,
+        olusturuldu  TEXT    NOT NULL,
+        aktif        INTEGER DEFAULT 1,
+        tetiklendi_f REAL,
+        tetiklendi_t TEXT)""")
+    c.row_factory = sqlite3.Row
+    return c
+
 def db_alarm_init():
     with sqlite3.connect(DB) as c:
+        c.execute("PRAGMA journal_mode=WAL")   # Concurrent access güvenliği
         c.execute("""
             CREATE TABLE IF NOT EXISTS alarmlar (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -343,7 +361,7 @@ def db_alarm_init():
         c.commit()
 
 def db_alarm_ekle(sembol: str, tip: str, hedef: float, not_: str = "") -> int:
-    with sqlite3.connect(DB) as c:
+    with _alarm_db() as c:
         cur = c.execute(
             "INSERT INTO alarmlar (sembol,tip,hedef_fiyat,not_,olusturuldu) VALUES (?,?,?,?,?)",
             (sembol.upper(), tip, hedef, not_,
@@ -353,13 +371,12 @@ def db_alarm_ekle(sembol: str, tip: str, hedef: float, not_: str = "") -> int:
         return cur.lastrowid
 
 def db_alarm_sil(alarm_id: int):
-    with sqlite3.connect(DB) as c:
+    with _alarm_db() as c:
         c.execute("UPDATE alarmlar SET aktif=0 WHERE id=?", (alarm_id,))
         c.commit()
 
 def db_alarm_listele(sadece_aktif: bool = True) -> list:
-    with sqlite3.connect(DB) as c:
-        c.row_factory = sqlite3.Row
+    with _alarm_db() as c:
         q = "SELECT * FROM alarmlar"
         if sadece_aktif:
             q += " WHERE aktif=1"
@@ -367,7 +384,7 @@ def db_alarm_listele(sadece_aktif: bool = True) -> list:
         return [dict(r) for r in c.execute(q).fetchall()]
 
 def db_alarm_tetiklendi(alarm_id: int, son_fiyat: float):
-    with sqlite3.connect(DB) as c:
+    with _alarm_db() as c:
         c.execute(
             "UPDATE alarmlar SET aktif=0,tetiklendi_f=?,tetiklendi_t=? WHERE id=?",
             (son_fiyat, datetime.now().strftime("%d.%m.%Y %H:%M:%S"), alarm_id)
@@ -479,6 +496,8 @@ def _pozisyon_kontrol():
             continue
         sym = sembol.replace(".IS", "")
         alis = poz["alis"]
+        if alis <= 0:
+            continue
         kar_yuz = (fiyat - alis) / alis * 100
 
         # ── STOP tetiklendi ───────────────────────────────────────
