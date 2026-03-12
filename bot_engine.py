@@ -1,5 +1,5 @@
 """
-bot_engine.py — BIST Sinyal Motoru v5.0 (FINAL)
+bot_engine.py — BIST Sinyal Motoru v6.0
 ════════════════════════════════════════════════
 Düzeltmeler (v4→v5):
   ✅ Bellek sızıntısı giderildi (df artık döndürülmüyor)
@@ -25,16 +25,20 @@ import pandas as pd
 
 warnings.filterwarnings("ignore")
 
-# ─── İş Yatırım Veri Katmanı ─────────────────────────────────────
+# ─── TradingView + yfinance Veri Katmanı ────────────────────────
 try:
-    from isyatirim_veri import ohlcv_al as _ISY_OHLCV, bilanco_al as _ISY_BILANCO
+    from isyatirim_veri import (
+        ohlcv_al   as _ISY_OHLCV,
+        bilanco_al as _ISY_BILANCO,
+        endeks_al  as _ISY_ENDEKS,
+    )
     _HAS_ISY_VERI = True
-    print("[BOT] ✅ isyatirim_veri modülü yüklendi")
+    print("[BOT] ✅ isyatirim_veri modülü yüklendi (TradingView + yfinance)")
 except ImportError:
     _HAS_ISY_VERI = False
     print("[BOT] ⚠ isyatirim_veri bulunamadı")
 
-# yfinance — sadece fallback ve intraday için
+# yfinance — sadece bilanço ve tarihsel getiri için
 try:
     import yfinance as yf
     _HAS_YF = True
@@ -265,20 +269,22 @@ def _flatten(df: pd.DataFrame) -> pd.DataFrame:
 
 def _indir(sembol: str, period: str, interval: str) -> Optional[pd.DataFrame]:
     """
-    Veri indir — isyatirimhisse önce (günlük), yfinance fallback.
+    Veri indir:
+      1. TradingView (tvdatafeed) — günlük, haftalık, 3 aylık (hepsi)
+      2. yfinance fallback — TV başarısız olursa
     Sadece gerçek delisting hatalarında blacklist'e ekle.
     """
     try:
-        # isyatirim_veri modülü varsa kullan (günlük veriler için)
-        if _HAS_ISY_VERI and interval == "1d":
-            df = _ISY_OHLCV(sembol.replace(".IS", ""), period=period, interval="1d")
+        # ── TradingView (isyatirim_veri üzerinden) ────────────────
+        if _HAS_ISY_VERI:
+            df = _ISY_OHLCV(sembol.replace(".IS", ""), period=period, interval=interval)
             if df is not None and not df.empty:
                 needed = {"Open", "High", "Low", "Close", "Volume"}
                 if needed.issubset(df.columns):
-                    _log(f"_indir({sembol}): isyatirimhisse ✅")
+                    _log(f"_indir({sembol}): TradingView ✅")
                     return df
 
-        # yfinance fallback (intraday veya isyatirimhisse başarısız)
+        # ── yfinance fallback ─────────────────────────────────────
         if not _HAS_YF:
             return None
         with _sessiz():
@@ -891,16 +897,15 @@ def bist100_durumu() -> dict:
             return _endeks_cache["data"]
     try:
         df = None
-        # isyatirim_veri modülü varsa endeks verisini oradan al
+        # TradingView üzerinden endeks verisi
         if _HAS_ISY_VERI:
             try:
-                from isyatirim_veri import endeks_al
-                df = endeks_al("XU100")
+                df = _ISY_ENDEKS("XU100")
             except Exception:
                 df = None
 
         # yfinance fallback
-        if (df is None or df.empty) and _HAS_YF:
+        if (df is None or (hasattr(df, "empty") and df.empty)) and _HAS_YF:
             with _sessiz():
                 df = yf.download("XU100.IS", period="5d", interval="1d",
                                  progress=False, auto_adjust=True)
@@ -1048,7 +1053,7 @@ def _tarihsel_getiri(sembol: str) -> dict:
     if not _HAS_YF:
         return bos
     try:
-        with _yf_quiet():
+        with _sessiz():
             df = yf.download(sembol, period="3y", interval="1d",
                              auto_adjust=True, progress=False)
         if df is None or df.empty or len(df) < 20:
@@ -1083,11 +1088,10 @@ def _tarihsel_getiri(sembol: str) -> dict:
         return bos
 
 
-# ─── TEMEL ANALİZ v3.0 — isyatirimhisse + yfinance fallback ─────
+# ─── TEMEL ANALİZ v3.0 — yfinance bilanço ───────────────────────
 def temel_analiz(sembol: str) -> dict:
     """
-    Gerçek KAP/İş Yatırım bilanço verisini kullanır.
-    isyatirimhisse → yfinance fallback
+    Bilanço verisini yfinance üzerinden çeker (isyatirim_veri üzerinden).
     
     Returns:
         pe, pb                          — oran
@@ -1110,13 +1114,13 @@ def temel_analiz(sembol: str) -> dict:
     }
 
     try:
-        # ── isyatirimhisse bilanço verisi ─────────────────────────
+        # ── yfinance bilanço verisi (isyatirim_veri üzerinden) ───
         if _HAS_ISY_VERI:
             bilanco = _ISY_BILANCO(sembol.replace(".IS", ""))
         else:
             bilanco = {"veri_var": False, "kaynak": "yok"}
 
-        # Fallback: yfinance ile mevcut mantığı koru
+        # Fallback: direkt yfinance
         if not bilanco.get("veri_var") and _HAS_YF:
             try:
                 ticker = yf.Ticker(sembol)
@@ -1166,7 +1170,7 @@ def temel_analiz(sembol: str) -> dict:
                 "nakit_m": None,
             }
 
-        # ── isyatirimhisse verisi ile temel skor hesapla ──────────
+        # ── yfinance bilanço ile temel skor hesapla ───────────────
         temel_skor  = bilanco.get("temel_skor", 0)
         kar_durumu  = bilanco.get("kar_durumu", "belirsiz")
         uyarilar    = bilanco.get("uyarilar", [])

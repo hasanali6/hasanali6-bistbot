@@ -1,5 +1,5 @@
 """
-dashboard.py — BIST Sinyal Panosu v5.0 (FINAL)
+dashboard.py — BIST Sinyal Panosu v6.0
 Bloomberg Terminal Estetiği
 Çalıştır: python dashboard.py  →  http://localhost:5000
 """
