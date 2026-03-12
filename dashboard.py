@@ -117,7 +117,7 @@ def tara():
 
         toplam = len(BIST_HISSELER)
         tamamlanan = 0
-        with ThreadPoolExecutor(max_workers=6) as ex:
+        with ThreadPoolExecutor(max_workers=4) as ex:
             gelecekler = {ex.submit(_analiz_tek, s): s for s in BIST_HISSELER}
             for f in as_completed(gelecekler):
                 r = f.result()
@@ -879,7 +879,8 @@ async function veriYukle(){
     } else banner.style.display='none';
 
     // Seans uyarı banner
-    const sb = document.getElementById('seans-banner');
+    const seans_banner = document.getElementById('seans-banner');
+    const sb = seans_banner;
     if(d.seans&&d.seans.durum==='volatil'&&sb){
       sb.textContent = d.seans.mesaj || '';
       sb.style.display='block';
