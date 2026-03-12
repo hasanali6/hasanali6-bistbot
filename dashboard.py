@@ -108,7 +108,19 @@ def tara():
     try:
         sonuclar = []
         from concurrent.futures import ThreadPoolExecutor, as_completed
-        # Paralel tarama — 6 thread, 3-4x hızlı
+
+        # Batch download — tüm hisseleri toplu çek (daha fazla hisse bulunur)
+        try:
+            from isyatirim_veri import batch_indir
+            semboller = [s.replace(".IS","") for s in BIST_HISSELER]
+            print(f"[TARA] Batch download — {len(semboller)} hisse...")
+            batch_indir(semboller, period="2y", interval="1d")
+            batch_indir(semboller, period="2y", interval="1wk")
+            print("[TARA] Batch download tamamlandı ✅")
+        except Exception as _be:
+            print(f"[TARA] Batch atlandı: {_be}")
+
+        # Paralel tarama — 4 thread
         def _analiz_tek(s):
             try:
                 return zamansal_analiz(s)

@@ -32,8 +32,10 @@ _CACHE_LOCK    = threading.RLock()
 _OHLCV_CACHE   = {}
 _BILANCO_CACHE = {}
 _ENDEKS_CACHE  = {}
+_BATCH_CACHE   = {}   # {period_interval: {sym: df, ts: time}}
 _OHLCV_TTL     = 900      # 15 dakika
 _BILANCO_TTL   = 86400    # 24 saat
+_BATCH_TTL     = 900      # 15 dakika
 
 def _sym_clean(sembol: str) -> str:
     return sembol.replace(".IS", "").replace(".is", "").upper().strip()
@@ -78,12 +80,67 @@ def _temizle(df) -> Optional[pd.DataFrame]:
     df = df[df["Close"] > 0]
     return df if not df.empty else None
 
+# ─── BATCH DOWNLOAD ──────────────────────────────────────────────
+def batch_indir(semboller: list, period: str = "2y", interval: str = "1d") -> dict:
+    """
+    Tüm hisseleri tek seferde batch download — çok daha hızlı ve stabil.
+    Returns: {sym: df} dict
+    """
+    batch_key = f"batch_{period}_{interval}"
+    with _CACHE_LOCK:
+        hit = _BATCH_CACHE.get(batch_key)
+        if hit and (time.time() - hit["ts"]) < _BATCH_TTL:
+            return hit["data"]
+
+    if not _HAS_YF:
+        return {}
+
+    # 50'şer hisse gruplarında indir
+    sonuc = {}
+    gruplar = [semboller[i:i+50] for i in range(0, len(semboller), 50)]
+
+    for grup in gruplar:
+        try:
+            tickers = [f"{s}.IS" for s in grup]
+            old_err = sys.stderr; sys.stderr = io.StringIO()
+            df_batch = yf.download(
+                tickers,
+                period=period,
+                interval=interval,
+                progress=False,
+                auto_adjust=True,
+                group_by="ticker",
+            )
+            sys.stderr = old_err
+
+            if df_batch is None or df_batch.empty:
+                continue
+
+            for sym in grup:
+                try:
+                    ticker = f"{sym}.IS"
+                    if ticker in df_batch.columns.get_level_values(0):
+                        df = df_batch[ticker].copy()
+                        df = _temizle(df)
+                        if df is not None:
+                            sonuc[sym] = df
+                except Exception:
+                    continue
+            time.sleep(0.5)
+        except Exception:
+            continue
+
+    with _CACHE_LOCK:
+        _BATCH_CACHE[batch_key] = {"data": sonuc, "ts": time.time()}
+
+    return sonuc
+
+
 # ─── ANA OHLCV FONKSİYONU ────────────────────────────────────────
 def ohlcv_al(sembol: str, period: str = "2y", interval: str = "1d") -> Optional[pd.DataFrame]:
     """
-    OHLCV verisi — yfinance.
-    sembol: THYAO veya THYAO.IS her ikisini kabul eder.
-    Blacklist YOK — başarısız olursa None döner, bir dahaki taramada tekrar dener.
+    OHLCV verisi — önce batch cache'e bak, yoksa tek tek çek.
+    Blacklist YOK.
     """
     sym = _sym_clean(sembol)
     cache_key = f"{sym}_{period}_{interval}"
@@ -92,6 +149,15 @@ def ohlcv_al(sembol: str, period: str = "2y", interval: str = "1d") -> Optional[
         hit = _OHLCV_CACHE.get(cache_key)
         if hit and (time.time() - hit["ts"]) < _OHLCV_TTL:
             return hit["df"].copy()
+
+    # Batch cache'e bak
+    batch_key = f"batch_{period}_{interval}"
+    with _CACHE_LOCK:
+        batch = _BATCH_CACHE.get(batch_key)
+        if batch and (time.time() - batch["ts"]) < _BATCH_TTL:
+            df = batch["data"].get(sym)
+            if df is not None:
+                return df.copy()
 
     if not _HAS_YF:
         return None
