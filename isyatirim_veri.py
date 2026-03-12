@@ -253,7 +253,7 @@ def _isy_bilanco(sym: str, yil_sayisi: int = 3) -> dict:
         # financial_group='2' → IFRS (büyük şirketler)
         # financial_group='1' → XI_29 (KOBİ)
         df = None
-        for fg in ["2", "1", "3"]:
+        for fg in ["2", "1", "3", "4"]:
             try:
                 df = fetch_financials(
                     symbols=sym,
@@ -268,7 +268,8 @@ def _isy_bilanco(sym: str, yil_sayisi: int = 3) -> dict:
                 continue
 
         if df is None or df.empty:
-            return {**_BOSTA_BILANCO, "sembol": sym}
+            # Bilanço yok ama hisseyi elemeyiz — boş ama geçerli sonuç dön
+            return {**_BOSTA_BILANCO, "sembol": sym, "veri_var": False, "kaynak": "yok"}
 
         # ─── Bilanço kalemlerini bul ──────────────────────────────
         # isyatirimhisse DataFrame yapısı:

@@ -123,53 +123,64 @@ _HC = [
     "AVGYO.IS","AVHOL.IS","AVISA.IS","AVOD.IS","AVTUR.IS","AYCES.IS","AYDEM.IS","AYEN.IS",
     "AYNES.IS","AYRNT.IS","AZTEK.IS","BAGFS.IS","BAHKM.IS","BAKAB.IS","BALAT.IS","BALT.IS",
     "BANVT.IS","BARMA.IS","BASCM.IS","BASGZ.IS","BAYRK.IS","BERA.IS","BEYAZ.IS","BFREN.IS",
-    "BIMAS.IS","BJKAS.IS","BLCYT.IS","BMEKS.IS","BMSCH.IS","BOLUC.IS","BOSSA.IS","BRISA.IS",
-    "BRKO.IS","BRKVY.IS","BRMEN.IS","BRSAS.IS","BSOKE.IS","BTCIM.IS","BUCIM.IS","BURCE.IS",
-    "BURVA.IS","BVSAN.IS","BYDNR.IS","CANTE.IS","CATES.IS","CBGYO.IS","CCOLA.IS","CELHA.IS",
-    "CEMAS.IS","CEMTS.IS","CEOEM.IS","CGCAM.IS","CIMSA.IS","CLEBI.IS","CLOUD.IS","CMBTN.IS",
-    "CMENT.IS","CONSE.IS","COSMO.IS","CRDFA.IS","CRFSA.IS","CUSAN.IS","CVKMD.IS","CWENE.IS",
-    "DAGHL.IS","DAGI.IS","DAPGM.IS","DARDL.IS","DATEGY.IS","DENGE.IS","DERHL.IS","DERIM.IS",
-    "DESA.IS","DESPC.IS","DEVA.IS","DGATE.IS","DGKLB.IS","DGNMO.IS","DIRI.IS","DITAS.IS",
-    "DMSAS.IS","DOAS.IS","DOGUB.IS","DOHOL.IS","DOKTA.IS","DURDO.IS","DYOBY.IS","DZGYO.IS",
-    "ECILC.IS","ECZYT.IS","EDATA.IS","EDIP.IS","EFORC.IS","EGEEN.IS","EGGUB.IS","EGPRO.IS",
-    "EGSER.IS","EKGYO.IS","EKSUN.IS","ELITE.IS","EMKEL.IS","EMNIS.IS","ENERY.IS","ENFRA.IS",
-    "ENGYO.IS","ENJSA.IS","ENKAI.IS","EPLAS.IS","ERCAN.IS","ERCB.IS","EREGL.IS","ERSU.IS",
-    "ESCAR.IS","ESCOM.IS","ESEN.IS","ETILR.IS","ETYAT.IS","EUREN.IS","EUYO.IS","EVREN.IS",
-    "FADCO.IS","FENER.IS","FENR.IS","FLAP.IS","FMIZP.IS","FONET.IS","FORMT.IS","FORTE.IS",
-    "FRIGO.IS","FROTO.IS","FZLGY.IS","GARAN.IS","GARFA.IS","GEDZA.IS","GENIL.IS","GENTS.IS",
+    "BIENY.IS","BIMAS.IS","BINHO.IS","BIOEN.IS","BJKAS.IS","BLCYT.IS","BMEKS.IS","BMELK.IS",
+    "BMSCH.IS","BNTAS.IS","BOLUC.IS","BOSSA.IS","BOYP.IS","BRISA.IS","BRKO.IS","BRKVY.IS",
+    "BRMEN.IS","BRSAN.IS","BRSAS.IS","BRYAT.IS","BSOKE.IS","BTCIM.IS","BUCIM.IS","BUMER.IS",
+    "BURCE.IS","BURVA.IS","BVSAN.IS","BYDNR.IS","CANTE.IS","CATES.IS","CBGYO.IS","CCOLA.IS",
+    "CELHA.IS","CEMAS.IS","CEMTS.IS","CEOEM.IS","CGCAM.IS","CIMSA.IS","CLEBI.IS","CLOUD.IS",
+    "CMBTN.IS","CMENT.IS","CONSE.IS","COSMO.IS","CRDFA.IS","CRFSA.IS","CUSAN.IS","CVKMD.IS",
+    "CWENE.IS","DAGHL.IS","DAGI.IS","DAPGM.IS","DARDL.IS","DATEGY.IS","DENGE.IS","DERHL.IS",
+    "DERIM.IS","DESA.IS","DESPC.IS","DEVA.IS","DGATE.IS","DGGYO.IS","DGKLB.IS","DGNMO.IS",
+    "DIRI.IS","DITAS.IS","DMSAS.IS","DNISI.IS","DOAS.IS","DOGUB.IS","DOHOL.IS","DOKTA.IS",
+    "DURDO.IS","DYOBY.IS","DZGYO.IS","ECILC.IS","ECZYT.IS","EDATA.IS","EDIP.IS","EFORC.IS",
+    "EGEEN.IS","EGGUB.IS","EGPRO.IS","EGSER.IS","EKGYO.IS","EKIZ.IS","EKSUN.IS","ELITE.IS",
+    "EMKEL.IS","EMNIS.IS","ENERY.IS","ENFRA.IS","ENGYO.IS","ENJSA.IS","ENKAI.IS","EPLAS.IS",
+    "ERBOS.IS","ERCAN.IS","ERCB.IS","EREGL.IS","ERSU.IS","ESCAR.IS","ESCOM.IS","ESEN.IS",
+    "ETILR.IS","ETYAT.IS","EUPWR.IS","EUREN.IS","EUYO.IS","EVREN.IS","FADCO.IS","FENER.IS",
+    "FENR.IS","FINBN.IS","FLAP.IS","FMIZP.IS","FONET.IS","FORMT.IS","FORTE.IS","FRIGO.IS",
+    "FROTO.IS","FZLGY.IS","GARAN.IS","GARFA.IS","GEDIK.IS","GEDZA.IS","GENIL.IS","GENTS.IS",
     "GEREL.IS","GESAN.IS","GIPTA.IS","GLBMD.IS","GLCVY.IS","GLRYH.IS","GLYHO.IS","GMTAS.IS",
-    "GOKNR.IS","GOLTS.IS","GOODY.IS","GOZDE.IS","GRSEL.IS","GRTHO.IS","GSDDE.IS","GSDHO.IS",
-    "GSRAY.IS","GUBRE.IS","GUBRF.IS","GUNDG.IS","GUSGR.IS","GWIND.IS","HALKB.IS","HATEK.IS",
-    "HEDEF.IS","HEKTS.IS","HLGYO.IS","HRKET.IS","HTTBT.IS","HUBVC.IS","HUNER.IS","HURGZ.IS",
-    "ICBCT.IS","IEYHO.IS","IHAAS.IS","IHEVA.IS","IHGZT.IS","IHLAS.IS","IHLGM.IS","IHYAY.IS",
-    "IMASM.IS","INDES.IS","INTEM.IS","INVES.IS","IPEKE.IS","ISBIR.IS","ISCTR.IS","ISFIN.IS",
-    "ISGSY.IS","ISGYO.IS","ISMEN.IS","ISYAT.IS","IZFAS.IS","IZMDC.IS","IZOCM.IS","JANTS.IS",
-    "KAPLM.IS","KAREL.IS","KARSN.IS","KARTN.IS","KCHOL.IS","KERVT.IS","KFEIN.IS","KIPA.IS",
-    "KLGYO.IS","KLKIM.IS","KLMSN.IS","KLNMA.IS","KLRHO.IS","KLSER.IS","KLSYN.IS","KMPUR.IS",
-    "KNFRT.IS","KONKA.IS","KONTR.IS","KONYA.IS","KOPOL.IS","KORDS.IS","KOZAA.IS","KOZAL.IS",
-    "KRDMA.IS","KRDMB.IS","KRDMD.IS","KRPLS.IS","KRSTL.IS","KRTEK.IS","KUYAS.IS","KZBGY.IS",
-    "LCWGK.IS","LIDER.IS","LILAK.IS","LINK.IS","LKMNH.IS","LOGO.IS","LRSHO.IS","LUKSK.IS",
-    "MAALT.IS","MACKO.IS","MAGEN.IS","MAKIM.IS","MAKTK.IS","MANAS.IS","MAVI.IS","MEDTR.IS",
-    "MEGAP.IS","MEKAG.IS","MERKO.IS","METRO.IS","METUR.IS","MGROS.IS","MIPAZ.IS","MMCAS.IS",
-    "MNDRS.IS","MNVRL.IS","MOBTL.IS","MOGAN.IS","MONFL.IS","MPARK.IS","MRGYO.IS","MRSHL.IS",
-    "MSGYO.IS","MTRKS.IS","MZHLD.IS","NATEN.IS","NETAS.IS","NIBAS.IS","NILYT.IS","NKOMD.IS",
-    "NTHOL.IS","NTTUR.IS","NUGYO.IS","NUHCM.IS","OBAMS.IS","ODAS.IS","OFSYM.IS","OKCMD.IS",
-    "ONCSM.IS","ONRYT.IS","ORCAY.IS","ORGE.IS","ORKTK.IS","OSSA.IS","OSTIM.IS","OTKAR.IS",
-    "OYAKC.IS","OYYAT.IS","OZKGY.IS","OZRDN.IS","OZSUB.IS","PAGYO.IS","PAPIL.IS","PARSN.IS",
-    "PASEU.IS","PEKGY.IS","PENGD.IS","PENTA.IS","PETKM.IS","PETUN.IS","PGSUS.IS","PKART.IS",
-    "PKENT.IS","PLTUR.IS","PNLSN.IS","POLHO.IS","POLTK.IS","PRDGS.IS","PRZMA.IS","PSDTC.IS",
-    "PTOFS.IS","PWORK.IS","QNBFB.IS","QNBFL.IS","RALYH.IS","RAYSG.IS","RBALB.IS","RYGYO.IS",
-    "SAHOL.IS","SAMAT.IS","SANEL.IS","SANFM.IS","SARKY.IS","SASA.IS","SAYAS.IS","SDTTR.IS",
-    "SEDEF.IS","SEKFK.IS","SEKUR.IS","SELEC.IS","SELMR.IS","SENOL.IS","SEYKM.IS","SILVR.IS",
-    "SISE.IS","SKBNK.IS","SNGYO.IS","SNICA.IS","SNKRN.IS","SNTKS.IS","SODSN.IS","SOKM.IS",
-    "SONME.IS","SRVGY.IS","SUMAS.IS","SUWEN.IS","TAGGL.IS","TATGD.IS","TAVHL.IS","TCELL.IS",
-    "TDGYO.IS","TEZOL.IS","TGSAS.IS","THYAO.IS","TKFEN.IS","TKNSA.IS","TLMAN.IS","TMPOL.IS",
-    "TMSN.IS","TOASO.IS","TOFAS.IS","TRGYO.IS","TRKCM.IS","TRNSK.IS","TSGYO.IS","TSKB.IS",
-    "TSPOR.IS","TTKOM.IS","TTRAK.IS","TUCLK.IS","TUMTK.IS","TUPRS.IS","TUREX.IS","TURGG.IS",
-    "TURSG.IS","ULKER.IS","ULUFA.IS","ULUSE.IS","UNLU.IS","USAK.IS","USDTR.IS","VAKBN.IS",
-    "VAKFN.IS","VAKKO.IS","VBTYZ.IS","VESBE.IS","VESTL.IS","VKFYO.IS","VKGYO.IS","VKRYN.IS",
-    "VRGYO.IS","YAPRK.IS","YATAS.IS","YBTAS.IS","YESIL.IS","YGGYO.IS","YKBNK.IS","YKRYO.IS",
-    "YUNSA.IS","ZEDUR.IS","ZRGYO.IS",
+    "GNGR.IS","GOKNR.IS","GOLTS.IS","GOODY.IS","GOZDE.IS","GRSEL.IS","GRTHO.IS","GSDDE.IS",
+    "GSDHO.IS","GSRAY.IS","GUBRE.IS","GUBRF.IS","GUNDG.IS","GUNSEL.IS","GUSGR.IS","GWIND.IS",
+    "HALKB.IS","HATEK.IS","HDFGS.IS","HEDEF.IS","HEKTS.IS","HKTM.IS","HLGYO.IS","HRKET.IS",
+    "HTTBT.IS","HUBVC.IS","HUNER.IS","HURGZ.IS","HZGYO.IS","ICBCT.IS","IDGYO.IS","IEYHO.IS",
+    "IHAAS.IS","IHEVA.IS","IHGZT.IS","IHLAS.IS","IHLGM.IS","IHYAY.IS","IMASM.IS","INDES.IS",
+    "INTEM.IS","INVEO.IS","INVES.IS","IPEKE.IS","ISATR.IS","ISBIR.IS","ISCTR.IS","ISFIN.IS",
+    "ISGSY.IS","ISGYO.IS","ISMEN.IS","ISNET.IS","ISYAT.IS","IZENR.IS","IZFAS.IS","IZMDC.IS",
+    "IZOCM.IS","JANTS.IS","KAPLM.IS","KAREL.IS","KARSN.IS","KARTN.IS","KATMR.IS","KAYSE.IS",
+    "KCHOL.IS","KENT.IS","KERVT.IS","KFEIN.IS","KGYO.IS","KIPA.IS","KLGYO.IS","KLKIM.IS",
+    "KLMSN.IS","KLNMA.IS","KLRHO.IS","KLSER.IS","KLSYN.IS","KMPUR.IS","KNFRT.IS","KONKA.IS",
+    "KONTR.IS","KONYA.IS","KOPOL.IS","KORDS.IS","KOZAA.IS","KOZAL.IS","KRDMA.IS","KRDMB.IS",
+    "KRDMD.IS","KRONT.IS","KRPLS.IS","KRSTL.IS","KRTEK.IS","KTLEV.IS","KUYAS.IS","KZBGY.IS",
+    "KZGYO.IS","LCWGK.IS","LIDER.IS","LIDFA.IS","LILAK.IS","LINK.IS","LKMNH.IS","LOGO.IS",
+    "LRSHO.IS","LUDOS.IS","LUKSK.IS","MAALT.IS","MACKO.IS","MAGEN.IS","MAKIM.IS","MAKTK.IS",
+    "MANAS.IS","MAVI.IS","MEDTR.IS","MEGAP.IS","MEGES.IS","MEKAG.IS","MERCN.IS","MERIT.IS",
+    "MERKO.IS","METRO.IS","METUR.IS","MGROS.IS","MIATK.IS","MIKRO.IS","MIPAZ.IS","MMCAS.IS",
+    "MNDRS.IS","MNVRL.IS","MOBTL.IS","MOGAN.IS","MONFL.IS","MPARK.IS","MRDIN.IS","MRGYO.IS",
+    "MRSHL.IS","MSGYO.IS","MTRKS.IS","MZHLD.IS","NATEN.IS","NETAS.IS","NETRT.IS","NIBAS.IS",
+    "NILYT.IS","NKOMD.IS","NTGAZ.IS","NTHOL.IS","NTTUR.IS","NUGYO.IS","NUHCM.IS","OBAMS.IS",
+    "OBASE.IS","ODAS.IS","OFSYM.IS","OGEN.IS","OKCMD.IS","ONCSM.IS","ONRYT.IS","ORCAY.IS",
+    "ORGE.IS","ORKTK.IS","OSSA.IS","OSTIM.IS","OTKAR.IS","OYAKC.IS","OYLUM.IS","OYYAT.IS",
+    "OZKGY.IS","OZRDN.IS","OZSUB.IS","PAGYO.IS","PAPIL.IS","PARSN.IS","PASEU.IS","PCILT.IS",
+    "PEKGY.IS","PENGD.IS","PENTA.IS","PETKM.IS","PETUN.IS","PGSUS.IS","PINSU.IS","PKART.IS",
+    "PKENT.IS","PLTUR.IS","PNLSN.IS","PNSUT.IS","POLHO.IS","POLTK.IS","PRDGS.IS","PRKAB.IS",
+    "PRKME.IS","PRZMA.IS","PSDTC.IS","PTOFS.IS","PWORK.IS","QNBFB.IS","QNBFL.IS","RALYH.IS",
+    "RAYSG.IS","RBALB.IS","REEDR.IS","RHEAG.IS","RNPOL.IS","RODRG.IS","ROYDI.IS","RTALB.IS",
+    "RUBNS.IS","RYGYO.IS","RYSAS.IS","SAHOL.IS","SAMAT.IS","SANEL.IS","SANFM.IS","SARKY.IS",
+    "SASA.IS","SAYAS.IS","SDTTR.IS","SEDEF.IS","SEKFK.IS","SEKUR.IS","SELEC.IS","SELGD.IS",
+    "SELMR.IS","SENOL.IS","SEYKM.IS","SILVR.IS","SISE.IS","SKBAB.IS","SKBNK.IS","SNGYO.IS",
+    "SNICA.IS","SNKRN.IS","SNTKS.IS","SODSN.IS","SOKM.IS","SONME.IS","SRVGY.IS","SUMAS.IS",
+    "SUNTK.IS","SUWEN.IS","TABGD.IS","TAGGL.IS","TATEN.IS","TATGD.IS","TAVHL.IS","TBORG.IS",
+    "TCELL.IS","TDGYO.IS","TEKTU.IS","TETMT.IS","TEZOL.IS","TGSAS.IS","THYAO.IS","TIRE.IS",
+    "TKFEN.IS","TKNSA.IS","TLMAN.IS","TMNTR.IS","TMPOL.IS","TMSN.IS","TOASO.IS","TOFAS.IS",
+    "TRCAS.IS","TRGYO.IS","TRILC.IS","TRKCM.IS","TRKGY.IS","TRNSK.IS","TSGYO.IS","TSKB.IS",
+    "TSPOR.IS","TTKOM.IS","TTRAK.IS","TUCLK.IS","TUKAS.IS","TUMTK.IS","TUPRS.IS","TUREX.IS",
+    "TURGG.IS","TURHM.IS","TURSG.IS","TZNGY.IS","ULKER.IS","ULUFA.IS","ULUSE.IS","UNLU.IS",
+    "UNYEC.IS","USAK.IS","USAS.IS","USDTR.IS","VAKBN.IS","VAKFN.IS","VAKKO.IS","VANGD.IS",
+    "VBTS.IS","VBTYZ.IS","VERTU.IS","VESBE.IS","VESTL.IS","VKFGY.IS","VKFYO.IS","VKGYO.IS",
+    "VKRYN.IS","VRGYO.IS","VSTR.IS","YAPRK.IS","YATAS.IS","YAYLA.IS","YBTAS.IS","YESIL.IS",
+    "YGGYO.IS","YGYO.IS","YKBNK.IS","YKRYO.IS","YKSLN.IS","YLGYO.IS","YONGA.IS","YUNSA.IS",
+    "ZBGYO.IS","ZEDUR.IS","ZOREN.IS","ZRGYO.IS",
 ]
 
 def _nosyapi_list(api_key: str) -> list:
@@ -189,6 +200,28 @@ def _nosyapi_list(api_key: str) -> list:
         print(f"[BOT] NosyAPI hata: {e}")
     return []
 
+def _isyatirim_hisse_listesi() -> list:
+    """isyatirim.com.tr'den tüm BIST hisselerini çek."""
+    if not _HAS_REQ:
+        return []
+    try:
+        url = ("https://www.isyatirim.com.tr/_Layouts/15/IsYatirim.Website/Common"
+               "/Data.aspx/HisseSenetleri")
+        r = _req.get(url, timeout=20,
+                     headers={"User-Agent": "Mozilla/5.0"})
+        data = r.json()
+        codes = []
+        for item in data:
+            code = item.get("HISSEADI") or item.get("kod") or item.get("CODE") or ""
+            if code and len(code) <= 8:
+                codes.append(code.strip() + ".IS")
+        if codes:
+            print(f"[BOT] ✅ isyatirim.com.tr: {len(codes)} hisse yüklendi")
+            return codes
+    except Exception as e:
+        print(f"[BOT] isyatirim.com.tr liste hata: {e}")
+    return []
+
 def _bist_listesi_yukle() -> list:
     try:
         from config import NOSYAPI_KEY
@@ -198,6 +231,10 @@ def _bist_listesi_yukle() -> list:
                 return lst
     except (ImportError, AttributeError):
         pass
+    # isyatirim.com.tr'den dinamik liste dene
+    lst = _isyatirim_hisse_listesi()
+    if lst:
+        return lst
     print(f"[BOT] Dahili liste: {len(_HC)} hisse")
     return list(_HC)
 
@@ -1180,6 +1217,34 @@ def zamansal_analiz(sembol: str) -> Optional[dict]:
         gunluk   = analiz_et(sembol, "1d", "2y")
         haftalik = analiz_et(sembol, "1wk", "5y")
         if not gunluk:
+            # Minimal veri dön - hisseyi tamamen çıkarma
+            try:
+                if _HAS_YF:
+                    import yfinance as _yf2
+                    tk = _yf2.Ticker(sembol)
+                    inf = tk.fast_info
+                    fiyat = float(getattr(inf, "last_price", 0) or 0)
+                    if fiyat > 0:
+                        return {
+                            "sembol": sembol, "fiyat": fiyat, "degisim": 0.0,
+                            "puan": 0, "sinyal": "Veri Yok", "zamansal": "N/A",
+                            "haber": "N/A", "haber_puan": 0, "haber_ozet": "",
+                            "araci_hedef": None, "temel": {},
+                            "rsi": None, "macd": None, "supertrend": None,
+                            "hacim_oran": None, "atr": None, "volatilite": None,
+                            "hedef_1": None, "hedef_2": None, "stop_loss": None,
+                            "risk_kazan": None, "vade_gun": None,
+                            "ma50": None, "ma200": None, "bb_ust": None, "bb_alt": None,
+                            "stoch_k": None, "stoch_d": None,
+                            "divergence": None, "gap": None, "mum": None,
+                            "sektor_puan": 0, "piyasa_riski": False,
+                            "makro": {}, "tepki_modu": False,
+                            "seans": None, "seans_uyari": "", "endeks_guc": None,
+                            "tarihsel_getiri": {}, "guncelleme": datetime.now().strftime("%H:%M:%S"),
+                            "haber_basliklar": [], "haber_duygu": "notr",
+                        }
+            except Exception:
+                pass
             return None
 
         gp    = gunluk["puan"]

@@ -107,9 +107,29 @@ def tara():
     with LOCK: _cache["yukleniyor"] = True
     try:
         sonuclar = []
-        for s in BIST_HISSELER:
-            r = zamansal_analiz(s)
-            if r: sonuclar.append(r)
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        # Paralel tarama — 6 thread, 3-4x hızlı
+        def _analiz_tek(s):
+            try:
+                return zamansal_analiz(s)
+            except Exception:
+                return None
+
+        toplam = len(BIST_HISSELER)
+        tamamlanan = 0
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            gelecekler = {ex.submit(_analiz_tek, s): s for s in BIST_HISSELER}
+            for f in as_completed(gelecekler):
+                r = f.result()
+                if r:
+                    sonuclar.append(r)
+                tamamlanan += 1
+                # Her 10 hissede cache güncelle — dashboard dolmaya başlasın
+                if tamamlanan % 10 == 0:
+                    with LOCK:
+                        _cache["data"] = list(sonuclar)
+                        _cache["guncelleme"] = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+
         with LOCK:
             _cache["data"]       = sonuclar
             _cache["guncelleme"] = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
