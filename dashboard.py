@@ -860,8 +860,8 @@ async function veriYukle(){
     document.getElementById('h-sat').textContent  = tumData.filter(x=>['sat','guclu_sat'].includes(x.karar_kod)).length;
 
     // Tarama badge
-    const sb = document.getElementById('scan-badge');
-    sb.style.display = d.yukleniyor?'block':'none';
+    const scan_badge = document.getElementById('scan-badge');
+    if(scan_badge) scan_badge.style.display = d.yukleniyor?'block':'none';
 
     // Endeks
     son_endeks = d.endeks||{};
@@ -879,8 +879,7 @@ async function veriYukle(){
     } else banner.style.display='none';
 
     // Seans uyarı banner
-    const seans_banner = document.getElementById('seans-banner');
-    const sb = seans_banner;
+    const sb = document.getElementById('seans-banner');
     if(d.seans&&d.seans.durum==='volatil'&&sb){
       sb.textContent = d.seans.mesaj || '';
       sb.style.display='block';
