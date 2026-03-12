@@ -77,25 +77,12 @@ _BL_LOCK = threading.RLock()
 _BLACKLIST: set = set()
 
 def _bl_yukle() -> set:
-    try:
-        with open(BLACKLIST_FILE) as f:
-            return {l.strip() for l in f if l.strip()}
-    except FileNotFoundError:
-        return set()
+    """Blacklist devre dışı — boş set döndür."""
+    return set()
 
 def _bl_ekle(sembol: str):
-    """Sembolü hem dosyaya hem belleğe ekle."""
-    global _BLACKLIST
-    with _BL_LOCK:
-        if sembol in _BLACKLIST:
-            return  # Zaten var
-        _BLACKLIST.add(sembol)
-        try:
-            with open(BLACKLIST_FILE, "a") as f:
-                f.write(sembol + "\n")
-        except Exception:
-            pass
-    print(f"[BOT] ⛔ Blacklist: {sembol}")
+    """Blacklist devre dışı — hiçbir hisseyi kalıcı engelleme."""
+    pass  # Tüm hisseler her taramada yeniden denenir
 
 def _is_delisting_error(err_str: str) -> bool:
     """Sadece gerçek delisting/no-data hatalarını yakala."""
@@ -291,20 +278,16 @@ def _indir(sembol: str, period: str, interval: str) -> Optional[pd.DataFrame]:
             df = yf.download(sembol, period=period, interval=interval,
                              progress=False, auto_adjust=True)
         if df is None or df.empty:
-            _bl_ekle(sembol)
+            # Boş veri = blacklist DEĞİL
+            # TV'de var ama yfinance'de olmayan hisseler olabilir
             return None
         df = _flatten(df)
         needed = {"Open", "High", "Low", "Close", "Volume"}
         if not needed.issubset(df.columns):
-            _bl_ekle(sembol)
             return None
         return df
     except Exception as e:
-        err = str(e)
-        if _is_delisting_error(err):
-            _bl_ekle(sembol)
-        else:
-            _log(f"_indir({sembol}): {err}")
+        _log(f"_indir({sembol}): {e}")
         return None
 
 # ─── TEKNİK İNDİKATÖRLER ─────────────────────────────────────────
@@ -758,8 +741,6 @@ def analiz_et(sembol: str, interval: str = "1d", period: str = "2y") -> Optional
     Tek zaman dilimine göre teknik analiz yapar.
     DataFrame'i DÖNDÜRMEZ — sadece sayısal sonuçları döndürür.
     """
-    if sembol in _BLACKLIST:
-        return None
     try:
         df = _indir(sembol, period, interval)
         if df is None:
@@ -1215,8 +1196,6 @@ def zamansal_analiz(sembol: str) -> Optional[dict]:
     Günlük + Haftalık + Haber + Temel analizi birleştirip karar üretir.
     Ağırlıklar: Günlük 0.55 + Haftalık 0.25 + Haber 0.15 + Temel 0.05 = 1.00
     """
-    if sembol in _BLACKLIST:
-        return None
     try:
         gunluk   = analiz_et(sembol, "1d", "2y")
         haftalik = analiz_et(sembol, "1wk", "5y")
@@ -1997,8 +1976,6 @@ def zamansal_analiz_v6(sembol: str) -> Optional[dict]:
     + Makro risk uyarısı
     + Dinamik vade
     """
-    if sembol in _BLACKLIST:
-        return None
     try:
         gunluk   = analiz_et(sembol, "1d", "2y")
         haftalik = analiz_et(sembol, "1wk", "5y")
