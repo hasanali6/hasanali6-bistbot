@@ -2,17 +2,17 @@ name: BIST Sinyal Tarama
 
 on:
   schedule:
-    - cron: '0 6 * * 1-5'    # 09:00 TR
+    - cron: '0 6 * * 1-5'    # 09:00 TR (UTC+3)
     - cron: '0 8 * * 1-5'    # 11:00 TR
     - cron: '0 10 * * 1-5'   # 13:00 TR
     - cron: '0 12 * * 1-5'   # 15:00 TR
     - cron: '0 14 * * 1-5'   # 17:00 TR
-  workflow_dispatch:
+  workflow_dispatch:          # Elle de başlatılabilir
 
 jobs:
   tara:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Kodu indir
@@ -26,8 +26,9 @@ jobs:
       - name: Paketleri yükle
         run: pip install yfinance pandas numpy requests
 
-      - name: BIST Tarama
+      - name: BIST Tarama + Portföy Kontrolü
         env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PORTFOY:          ${{ secrets.PORTFOY }}
         run: python gha_tarama.py
